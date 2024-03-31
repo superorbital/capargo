@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"strings"
 	"time"
@@ -10,12 +11,15 @@ import (
 	"github.com/superorbital/capargo/pkg/types"
 	"istio.io/istio/pkg/kube"
 	"istio.io/istio/pkg/kube/controllers"
+	"istio.io/istio/pkg/kube/kclient"
 	"istio.io/istio/pkg/kube/krt"
 	"istio.io/istio/pkg/kube/kubetypes"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/rest"
+	"sigs.k8s.io/cluster-api/api/v1beta1"
 
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/clientcmd/api"
@@ -35,9 +39,18 @@ func LoadRestConfigFromSecret() rest.Config {
 	return rest.Config{}
 }
 
+func GetCluster() v1beta1.Cluster {
+	return v1beta1.Cluster{}
+}
+
 func NewCollection(client kube.Client) krt.Collection[corev1.Secret] {
 	recompute := krt.NewRecomputeTrigger()
 
+	capiClusterColl := krt.WrapClient[controllers.Object](kclient.NewDynamic(client, schema.GroupVersionResource{
+		Group:    v1beta1.GroupVersion.Group,
+		Version:  v1beta1.GroupVersion.Version,
+		Resource: strings.ToLower(fmt.Sprintf("%ss", v1beta1.ClusterKind)),
+	}, kubetypes.Filter{}))
 	capisecretColl := krt.NewInformerFiltered[*corev1.Secret](client, kubetypes.Filter{
 		Namespace: vclusterNamespace,
 		ObjectFilter: kubetypes.NewStaticObjectFilter(func(obj any) bool {
@@ -50,6 +63,11 @@ func NewCollection(client kube.Client) krt.Collection[corev1.Secret] {
 		}),
 	}, krt.WithName("cluster-api-secrets"))
 	coll := krt.NewCollection[*corev1.Secret, corev1.Secret](capisecretColl, func(ctx krt.HandlerContext, c *corev1.Secret) *corev1.Secret {
+		cluster := krt.FetchOne[controllers.Object](ctx, capiClusterColl)
+		if cluster == nil {
+			return nil
+		}
+		slog.Warn("Got cluster", "name", (*cluster).GetName())
 		recompute.MarkDependant(ctx)
 		clusterSecret := c
 		clusterName := strings.TrimSuffix(c.Name, "-kubeconfig")
