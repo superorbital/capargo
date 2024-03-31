@@ -29,10 +29,8 @@ func init() {
 
 func main() {
 	ctx := ctrl.SetupSignalHandler()
-	err := controller.NewController(client).Start(ctx)
-	if err != nil {
-		slog.Error("Failed to start controller", err)
-	}
+	coll := controller.NewCollection(client)
+	go coll.Synced().WaitUntilSynced(ctx.Done())
 	if !client.RunAndWait(ctx.Done()) {
 		slog.Error("Failed to start informers and sync client")
 		client.Shutdown()
