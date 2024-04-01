@@ -17,7 +17,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/cluster-api/api/v1beta1"
 
@@ -46,11 +45,7 @@ func GetCluster() v1beta1.Cluster {
 func NewCollection(client kube.Client) krt.Collection[corev1.Secret] {
 	recompute := krt.NewRecomputeTrigger()
 
-	capiClusterColl := krt.WrapClient[controllers.Object](kclient.NewDynamic(client, schema.GroupVersionResource{
-		Group:    v1beta1.GroupVersion.Group,
-		Version:  v1beta1.GroupVersion.Version,
-		Resource: strings.ToLower(fmt.Sprintf("%ss", v1beta1.ClusterKind)),
-	}, kubetypes.Filter{}))
+	capiClusterColl := krt.WrapClient[controllers.Object](kclient.NewDynamic(client, v1beta1.GroupVersion.WithResource(strings.ToLower(fmt.Sprintf("%ss", v1beta1.ClusterKind))), kubetypes.Filter{}))
 	capisecretColl := krt.NewInformerFiltered[*corev1.Secret](client, kubetypes.Filter{
 		Namespace: vclusterNamespace,
 		ObjectFilter: kubetypes.NewStaticObjectFilter(func(obj any) bool {

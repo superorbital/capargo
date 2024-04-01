@@ -12,6 +12,6 @@ kubectl rollout -n argocd status deployment argocd-server
 
 clusterctl init --infrastructure vcluster
 
-kubectl rollout -n capi-system status deployment argocd-server
+kubectl rollout -n capi-system status deployment capi-controller-manager
 
 kubectl create namespace vcluster
