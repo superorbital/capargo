@@ -1,0 +1,10 @@
+namespace: capargo
+resources:
+- namespace.yaml
+- deployment.yaml
+- clusterrole.yaml
+- clusterrolebinding.yaml
+- serviceaccount.yaml
+
+commonLabels:
+  app: capargo

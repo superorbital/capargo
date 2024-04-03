@@ -34,3 +34,25 @@ tasks:
         --build-arg="REVISION={{.REVISION}}"
   # test:
   # install:
+  create-cluster:
+    desc: "Creates a Kind cluster with a local registry and ArgoCD + Cluster API installed for testing"
+    cmds:
+    - ./hack/create-cluster.sh test-capargo
+    - ./hack/install-argocd.sh test-capargo
+    - ./hack/install-capv.sh test-capargo
+  cleanup-cluster:
+    desc: "Deletes the Kind cluster and the local registry"
+    cmds:
+    - ./hack/cleanup-cluster.sh test-capargo
+  get-kubeconfig:
+    desc: "Retrieves the test cluster kubeconfig and saves it as \"test-capargo-cluster.kubeconfig\""
+    cmds:
+    - ./hack/get-kubeconfig.sh test-capargo
+  demo-install:
+    desc: "Installs the demo of capargo with a CAPV cluster on the Kind cluster"
+    cmds:
+    - ./hack/install-demo.sh test-capargo
+  demo-uninstall:
+    desc: "Removes the capargo demo with the CAPV cluster from the Kind cluster"
+    cmds:
+    - ./hack/uninstall-demo.sh test-capargo

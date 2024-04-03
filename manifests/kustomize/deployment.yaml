@@ -1,0 +1,18 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: capargo
+spec:
+  replicas: 1
+  selector: {}
+  template:
+    spec:
+      containers:
+      - name: capargo
+        image: localhost:5001/superorbital/capargo:local
+        imagePullPolicy: Always
+        resources:
+          limits:
+            cpu: 500m
+            memory: 1G
+      serviceAccount: capargo
