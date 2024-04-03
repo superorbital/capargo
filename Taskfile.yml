@@ -15,3 +15,22 @@ tasks:
         -X main.BuildTime={{.BUILDTIME}} \
         -X main.Revision={{.REVISION}}" \
         -o bin/capargo cmd/capargo/main.go
+  build-image:
+    desc: "Builds the capargo image"
+    vars:
+      BUILDTIME:
+        sh: date -u +'%Y-%m-%dT%H:%M:%SZ'
+      REVISION:
+        sh: git rev-parse --short HEAD
+      REGISTRY: '{{default "localhost:5001/superorbital" .REGISTRY}}'
+      VERSION: '{{default "local" .VERSION}}'
+    cmds:
+    - |
+      docker buildx build \
+        --tag {{.REGISTRY}}/capargo:{{.VERSION}} \
+        --load . \
+        --build-arg="VERSION={{.VERSION}}" \
+        --build-arg="BUILDTIME={{.BUILDTIME}}" \
+        --build-arg="REVISION={{.REVISION}}"
+  # test:
+  # install:
