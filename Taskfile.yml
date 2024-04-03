@@ -1,0 +1,17 @@
+version: '3'
+
+tasks:
+  build:
+    desc: "Builds the capargo binary executable"
+    vars:
+      BUILDTIME: '{{default "now" .BUILDTIME}}'
+      REVISION: '{{default "local" .REVISION}}'
+      VERSION: '{{default "dev" .VERSION}}'
+    cmds:
+    - |
+      CGO_ENABLED=0 go build \
+        -ldflags="-s \
+        -X main.Version={{.VERSION}} \
+        -X main.BuildTime={{.BUILDTIME}} \
+        -X main.Revision={{.REVISION}}" \
+        -o bin/capargo cmd/capargo/main.go
