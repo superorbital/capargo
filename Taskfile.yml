@@ -1,0 +1,58 @@
+version: '3'
+
+tasks:
+  build:
+    desc: "Builds the capargo binary executable"
+    vars:
+      BUILDTIME: '{{default "now" .BUILDTIME}}'
+      REVISION: '{{default "local" .REVISION}}'
+      VERSION: '{{default "dev" .VERSION}}'
+    cmds:
+    - |
+      CGO_ENABLED=0 go build \
+        -ldflags="-s \
+        -X main.Version={{.VERSION}} \
+        -X main.BuildTime={{.BUILDTIME}} \
+        -X main.Revision={{.REVISION}}" \
+        -o bin/capargo cmd/capargo/main.go
+  build-image:
+    desc: "Builds the capargo image"
+    vars:
+      BUILDTIME:
+        sh: date -u +'%Y-%m-%dT%H:%M:%SZ'
+      REVISION:
+        sh: git rev-parse --short HEAD
+      REGISTRY: '{{default "localhost:5001/superorbital" .REGISTRY}}'
+      VERSION: '{{default "local" .VERSION}}'
+    cmds:
+    - |
+      docker buildx build \
+        --tag {{.REGISTRY}}/capargo:{{.VERSION}} \
+        --load . \
+        --build-arg="VERSION={{.VERSION}}" \
+        --build-arg="BUILDTIME={{.BUILDTIME}}" \
+        --build-arg="REVISION={{.REVISION}}"
+  # test:
+  # install:
+  create-cluster:
+    desc: "Creates a Kind cluster with a local registry and ArgoCD + Cluster API installed for testing"
+    cmds:
+    - ./hack/create-cluster.sh test-capargo
+    - ./hack/install-argocd.sh test-capargo
+    - ./hack/install-capv.sh test-capargo
+  cleanup-cluster:
+    desc: "Deletes the Kind cluster and the local registry"
+    cmds:
+    - ./hack/cleanup-cluster.sh test-capargo
+  get-kubeconfig:
+    desc: "Retrieves the test cluster kubeconfig and saves it as \"test-capargo-cluster.kubeconfig\""
+    cmds:
+    - ./hack/get-kubeconfig.sh test-capargo
+  demo-install:
+    desc: "Installs the demo of capargo with a CAPV cluster on the Kind cluster"
+    cmds:
+    - ./hack/install-demo.sh test-capargo
+  demo-uninstall:
+    desc: "Removes the capargo demo with the CAPV cluster from the Kind cluster"
+    cmds:
+    - ./hack/uninstall-demo.sh test-capargo
