@@ -14,6 +14,7 @@ import (
 	"istio.io/istio/pkg/kube/kclient"
 	"istio.io/istio/pkg/kube/krt"
 	"istio.io/istio/pkg/kube/kubetypes"
+	istiolog "istio.io/istio/pkg/log"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -23,6 +24,9 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/clientcmd/api"
 )
+
+// Logger options
+var logger = istiolog.RegisterScope("capargo-controller", "")
 
 func GetArgoConfigFromSecret() types.ClusterConfig {
 	return types.ClusterConfig{}
@@ -36,7 +40,7 @@ func GetCluster() v1beta1.Cluster {
 	return v1beta1.Cluster{}
 }
 
-func NewCollection(client kube.Client, options types.Options) krt.Collection[corev1.Secret] {
+func NewCollection(ctx context.Context, client kube.Client, options types.Options) krt.Collection[corev1.Secret] {
 	recompute := krt.NewRecomputeTrigger()
 
 	capiClusterColl := krt.WrapClient[controllers.Object](kclient.NewDynamic(client, v1beta1.GroupVersion.WithResource(strings.ToLower(fmt.Sprintf("%ss", v1beta1.ClusterKind))), kubetypes.Filter{}))
@@ -93,31 +97,44 @@ func NewCollection(client kube.Client, options types.Options) krt.Collection[cor
 			},
 		}
 	}, krt.WithName("argo-secret-collection"))
+
 	coll.Register(func(o krt.Event[corev1.Secret]) {
 		tryUpdate := false
-		if o.Event == controllers.EventAdd {
-			_, err := client.Kube().CoreV1().Secrets(o.New.Namespace).Create(context.TODO(), o.New, metav1.CreateOptions{})
+		if o.Event == controllers.EventAdd || o.Event == controllers.EventUpdate {
+			cctx, cancel := context.WithTimeout(ctx, options.Timeout)
+			defer cancel()
+			_, err := client.Kube().CoreV1().Secrets(o.New.Namespace).Create(cctx, o.New, metav1.CreateOptions{})
 			if err != nil {
 				if errors.IsAlreadyExists(err) {
 					tryUpdate = true
 				} else {
-					slog.Error("Failed to create secret for cluster", "name", o.New.Name, "error", err)
+					logger.Errorf("Failed to create ArgoCD secret %s/%s: %v",
+						o.New.Namespace, o.New.Name, err,
+					)
 				}
 			}
 		}
-		if o.Event == controllers.EventUpdate || tryUpdate {
-			_, err := client.Kube().CoreV1().Secrets(o.New.Namespace).Update(context.TODO(), o.New, metav1.UpdateOptions{})
+		if tryUpdate {
+			cctx, cancel := context.WithTimeout(ctx, options.Timeout)
+			defer cancel()
+			_, err := client.Kube().CoreV1().Secrets(o.New.Namespace).Update(cctx, o.New, metav1.UpdateOptions{})
 			if err != nil {
-				slog.Error("Failed to update secret for cluster. Waiting 15 seconds then recomputing", "name", o.New.Name, "error", err)
+				logger.Errorf("Failed to update ArgoCD secret %s/%s: %v. Waiting 15 seconds then recomputing",
+					o.New.Namespace, o.New.Name, err,
+				)
 				go func() {
 					time.Sleep(15 * time.Second)
 					recompute.TriggerRecomputation()
 				}()
 			}
 		} else if o.Event == controllers.EventDelete {
-			err := client.Kube().CoreV1().Secrets(o.New.Namespace).Delete(context.TODO(), o.New.Name, metav1.DeleteOptions{})
-			if err != nil {
-				slog.Error("Failed to delete secret for cluster. Waiting 15 seconds then recomputing", "name", o.New.Name, "error", err)
+			cctx, cancel := context.WithTimeout(ctx, options.Timeout)
+			defer cancel()
+			err := client.Kube().CoreV1().Secrets(o.Old.Namespace).Delete(cctx, o.Old.Name, metav1.DeleteOptions{})
+			if err != nil && !errors.IsNotFound(err) {
+				logger.Errorf("Failed to delete ArgoCD secret %s/%s: %v. Waiting 15 seconds then recomputing",
+					o.Old.Namespace, o.Old.Name, err,
+				)
 				go func() {
 					time.Sleep(15 * time.Second)
 					recompute.TriggerRecomputation()

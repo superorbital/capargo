@@ -79,7 +79,7 @@ var rootCmd = &cobra.Command{
 			os.Exit(1)
 		}
 		ctx := ctrl.SetupSignalHandler()
-		coll := controller.NewCollection(client, o)
+		coll := controller.NewCollection(ctx, client, o)
 		go coll.Synced().WaitUntilSynced(ctx.Done())
 		if !client.RunAndWait(ctx.Done()) {
 			logger.Error("Failed to start informers and sync client")
