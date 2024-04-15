@@ -24,12 +24,6 @@ import (
 	"k8s.io/client-go/tools/clientcmd/api"
 )
 
-// TODO: flags
-const (
-	vclusterNamespace = "vcluster"
-	argoNamespace     = "argocd"
-)
-
 func GetArgoConfigFromSecret() types.ClusterConfig {
 	return types.ClusterConfig{}
 }
@@ -42,12 +36,12 @@ func GetCluster() v1beta1.Cluster {
 	return v1beta1.Cluster{}
 }
 
-func NewCollection(client kube.Client) krt.Collection[corev1.Secret] {
+func NewCollection(client kube.Client, options types.Options) krt.Collection[corev1.Secret] {
 	recompute := krt.NewRecomputeTrigger()
 
 	capiClusterColl := krt.WrapClient[controllers.Object](kclient.NewDynamic(client, v1beta1.GroupVersion.WithResource(strings.ToLower(fmt.Sprintf("%ss", v1beta1.ClusterKind))), kubetypes.Filter{}))
 	capisecretColl := krt.NewInformerFiltered[*corev1.Secret](client, kubetypes.Filter{
-		Namespace: vclusterNamespace,
+		Namespace: options.ClusterNamespace,
 		ObjectFilter: kubetypes.NewStaticObjectFilter(func(obj any) bool {
 			s, ok := obj.(*corev1.Secret)
 			if !ok {
@@ -86,7 +80,7 @@ func NewCollection(client kube.Client) krt.Collection[corev1.Secret] {
 		return &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      clusterName,
-				Namespace: argoNamespace,
+				Namespace: options.ArgoNamespace,
 				Labels: map[string]string{
 					"argocd.argoproj.io/secret-type": "cluster",
 					"controller":                     "capargo",
