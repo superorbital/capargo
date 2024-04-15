@@ -11,10 +11,10 @@ tasks:
     - |
       CGO_ENABLED=0 go build \
         -ldflags="-s \
-        -X main.Version={{.VERSION}} \
-        -X main.BuildTime={{.BUILDTIME}} \
-        -X main.Revision={{.REVISION}}" \
-        -o bin/capargo cmd/capargo/main.go
+        -X github.com/superorbital/capargo/cmd.Version={{.VERSION}} \
+        -X github.com/superorbital/capargo/cmd.BuildTime={{.BUILDTIME}} \
+        -X github.com/superorbital/capargo/cmd.Revision={{.REVISION}}" \
+        -o bin/capargo main.go
   build-image:
     desc: "Builds the capargo image"
     vars:
