@@ -9,6 +9,9 @@ spec:
     spec:
       containers:
       - name: capargo
+        args:
+          - --argo-namespace=argocd
+          - --cluster-namespace=vcluster
         image: localhost:5001/superorbital/capargo:local
         imagePullPolicy: Always
         resources:

@@ -4,31 +4,35 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"strings"
 	"time"
 
+	"github.com/superorbital/capargo/pkg/providers"
 	"github.com/superorbital/capargo/pkg/types"
+	"istio.io/istio/pkg/config"
+	"istio.io/istio/pkg/config/schema/kubeclient"
 	"istio.io/istio/pkg/kube"
 	"istio.io/istio/pkg/kube/controllers"
-	"istio.io/istio/pkg/kube/kclient"
 	"istio.io/istio/pkg/kube/krt"
 	"istio.io/istio/pkg/kube/kubetypes"
+	istiolog "istio.io/istio/pkg/log"
 	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/cluster-api/api/v1beta1"
 
+	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/clientcmd/api"
 )
 
-// TODO: flags
-const (
-	vclusterNamespace = "vcluster"
-	argoNamespace     = "argocd"
-)
+// Logger options
+var logger = istiolog.RegisterScope("capargo-controller", "")
 
 func GetArgoConfigFromSecret() types.ClusterConfig {
 	return types.ClusterConfig{}
@@ -42,88 +46,150 @@ func GetCluster() v1beta1.Cluster {
 	return v1beta1.Cluster{}
 }
 
-func NewCollection(client kube.Client) krt.Collection[corev1.Secret] {
-	recompute := krt.NewRecomputeTrigger()
-
-	capiClusterColl := krt.WrapClient[controllers.Object](kclient.NewDynamic(client, v1beta1.GroupVersion.WithResource(strings.ToLower(fmt.Sprintf("%ss", v1beta1.ClusterKind))), kubetypes.Filter{}))
-	capisecretColl := krt.NewInformerFiltered[*corev1.Secret](client, kubetypes.Filter{
-		Namespace: vclusterNamespace,
-		ObjectFilter: kubetypes.NewStaticObjectFilter(func(obj any) bool {
-			s, ok := obj.(*corev1.Secret)
-			if !ok {
-				slog.Warn("Failed to parse secret for object filter")
-				return false
+func NewCollection(ctx context.Context, client kube.Client, options types.Options) krt.Collection[corev1.Secret] {
+	// Create CAPI cluster informer
+	r := strings.ToLower(fmt.Sprintf("%ss", v1beta1.ClusterKind))
+	gvr := v1beta1.GroupVersion.WithResource(r)
+	kubeclient.Register[*unstructured.Unstructured](kubeclient.NewTypeRegistration[*unstructured.Unstructured](
+		v1.SchemeGroupVersion.WithResource(r),
+		config.GroupVersionKind{
+			Group:   gvr.Group,
+			Version: gvr.Version,
+			Kind:    v1beta1.ClusterKind,
+		},
+		&unstructured.Unstructured{},
+		func(c kubeclient.ClientGetter, o kubetypes.InformerOptions) cache.ListerWatcher {
+			cs := c.Dynamic().Resource(gvr).Namespace(o.Namespace)
+			return &cache.ListWatch{
+				ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
+					options.FieldSelector = o.FieldSelector
+					options.LabelSelector = o.LabelSelector
+					return cs.List(ctx, options)
+				},
+				WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
+					options.FieldSelector = o.FieldSelector
+					options.LabelSelector = o.LabelSelector
+					return cs.Watch(ctx, options)
+				},
+				DisableChunking: true,
 			}
-			return strings.HasSuffix(s.Name, "-kubeconfig")
-		}),
-	}, krt.WithName("cluster-api-secrets"))
-	coll := krt.NewCollection[*corev1.Secret, corev1.Secret](capisecretColl, func(ctx krt.HandlerContext, c *corev1.Secret) *corev1.Secret {
-		cluster := krt.FetchOne[controllers.Object](ctx, capiClusterColl)
-		if cluster == nil {
+		},
+	))
+	capiClusters := krt.NewInformer[*unstructured.Unstructured](client, krt.WithName("cluster-api-clusters"))
+
+	// Create the CAPI cluster secrets informer
+	capiSecrets := krt.NewInformerFiltered[*corev1.Secret](
+		client,
+		kubetypes.Filter{
+			Namespace: options.ClusterNamespace,
+			ObjectFilter: kubetypes.NewStaticObjectFilter(func(obj any) bool {
+				_, ok := obj.(*corev1.Secret)
+				if !ok {
+					logger.Error("Failed to parse secret for object filter")
+					return false
+				}
+				return true
+			}),
+		}, krt.WithName("cluster-api-secrets"))
+
+	// Create transformation function -- CAPI cluster + secret to ArgoCD secret.
+	recompute := krt.NewRecomputeTrigger()
+	coll := krt.NewCollection[*corev1.Secret, corev1.Secret](capiSecrets, func(ctx krt.HandlerContext, s *corev1.Secret) *corev1.Secret {
+		obj := krt.FetchOne[*unstructured.Unstructured](ctx, capiClusters)
+		if obj == nil {
 			return nil
 		}
-		slog.Warn("Got cluster", "name", (*cluster).GetName())
-		recompute.MarkDependant(ctx)
-		clusterSecret := c
-		clusterName := strings.TrimSuffix(c.Name, "-kubeconfig")
-		configBytes, ok := clusterSecret.Data["value"]
-		if !ok {
-			slog.Warn("Cluster secret does not contain key \"value\"", "secretName", clusterSecret.Name, "clusterName", clusterName)
+		var cluster v1beta1.Cluster
+		if err := runtime.DefaultUnstructuredConverter.FromUnstructured((*obj).Object, &cluster); err != nil {
+			logger.Errorf("Could not convert cluster %s/%s, %v", (*obj).GetNamespace(), (*obj).GetName(), err)
+			return nil
 		}
 
+		if !providers.IsCapiKubeconfig(s, &cluster) {
+			return nil
+		}
+
+		configBytes, ok := s.Data["value"]
+		if !ok {
+			logger.Errorf("Secret %s/%s does not contain key \"value\" for cluster %s",
+				s.Namespace, s.Name, cluster.Name)
+			return nil
+		}
+		recompute.MarkDependant(ctx)
+
+		// Create kubeconfig credentials from cluster secret
 		config, err := clientcmd.RESTConfigFromKubeConfig(configBytes)
 		if err != nil {
-			slog.Error("Failed to build rest config from kubeconfig for cluster API cluster", "name", c.Name)
+			logger.Errorf("Failed to build restconfig from the value in secret %s/%s for cluster %s",
+				s.Namespace, s.Name,
+				cluster.Name,
+			)
+			return nil
 		}
 
+		// Build the ArgoCD secret
 		clusterConfig := buildClusterConfigFromRestConfig(config)
-
 		ccJson, err := json.Marshal(clusterConfig)
 		if err != nil {
-			slog.Error("Failed to prepare cluster config for JSON marshal", "name", c.Name)
+			logger.Errorf("Could not marshal cluster config for cluster %s/%s",
+				cluster.Namespace, cluster.Name)
+			return nil
 		}
 
 		return &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      clusterName,
-				Namespace: argoNamespace,
+				Name:      cluster.Name,
+				Namespace: options.ArgoNamespace,
 				Labels: map[string]string{
 					"argocd.argoproj.io/secret-type": "cluster",
 					"controller":                     "capargo",
 				},
 			},
 			StringData: map[string]string{
-				"name":   clusterName,
+				"name":   cluster.Name,
 				"server": config.Host,
 				"config": string(ccJson),
 			},
 		}
 	}, krt.WithName("argo-secret-collection"))
+
 	coll.Register(func(o krt.Event[corev1.Secret]) {
 		tryUpdate := false
-		if o.Event == controllers.EventAdd {
-			_, err := client.Kube().CoreV1().Secrets(o.New.Namespace).Create(context.TODO(), o.New, metav1.CreateOptions{})
+		if o.Event == controllers.EventAdd || o.Event == controllers.EventUpdate {
+			cctx, cancel := context.WithTimeout(ctx, options.Timeout)
+			defer cancel()
+			_, err := client.Kube().CoreV1().Secrets(o.New.Namespace).Create(cctx, o.New, metav1.CreateOptions{})
 			if err != nil {
 				if errors.IsAlreadyExists(err) {
 					tryUpdate = true
 				} else {
-					slog.Error("Failed to create secret for cluster", "name", o.New.Name, "error", err)
+					logger.Errorf("Failed to create ArgoCD secret %s/%s: %v",
+						o.New.Namespace, o.New.Name, err,
+					)
 				}
 			}
 		}
-		if o.Event == controllers.EventUpdate || tryUpdate {
-			_, err := client.Kube().CoreV1().Secrets(o.New.Namespace).Update(context.TODO(), o.New, metav1.UpdateOptions{})
+		if tryUpdate {
+			cctx, cancel := context.WithTimeout(ctx, options.Timeout)
+			defer cancel()
+			_, err := client.Kube().CoreV1().Secrets(o.New.Namespace).Update(cctx, o.New, metav1.UpdateOptions{})
 			if err != nil {
-				slog.Error("Failed to update secret for cluster. Waiting 15 seconds then recomputing", "name", o.New.Name, "error", err)
+				logger.Errorf("Failed to update ArgoCD secret %s/%s: %v. Waiting 15 seconds then recomputing",
+					o.New.Namespace, o.New.Name, err,
+				)
 				go func() {
 					time.Sleep(15 * time.Second)
 					recompute.TriggerRecomputation()
 				}()
 			}
 		} else if o.Event == controllers.EventDelete {
-			err := client.Kube().CoreV1().Secrets(o.New.Namespace).Delete(context.TODO(), o.New.Name, metav1.DeleteOptions{})
-			if err != nil {
-				slog.Error("Failed to delete secret for cluster. Waiting 15 seconds then recomputing", "name", o.New.Name, "error", err)
+			cctx, cancel := context.WithTimeout(ctx, options.Timeout)
+			defer cancel()
+			err := client.Kube().CoreV1().Secrets(o.Old.Namespace).Delete(cctx, o.Old.Name, metav1.DeleteOptions{})
+			if err != nil && !errors.IsNotFound(err) {
+				logger.Errorf("Failed to delete ArgoCD secret %s/%s: %v. Waiting 15 seconds then recomputing",
+					o.Old.Namespace, o.Old.Name, err,
+				)
 				go func() {
 					time.Sleep(15 * time.Second)
 					recompute.TriggerRecomputation()
