@@ -18,20 +18,27 @@ func (v vCluster) IsKubeconfig(secret *corev1.Secret) bool {
 	switch v.APIVersion {
 	case "infrastructure.cluster.x-k8s.io/v1alpha1":
 		if secret.Namespace != v.Namespace {
-			logger.Debugf("Secret %s/%s is not in the same namespace as VCluster %s/%s",
-				secret.GetNamespace(), secret.GetName(),
-				v.Namespace, v.Name)
+			logger.V(4).Info("Secret is not in the same namespace as VCluster",
+				"secret namespace", secret.GetNamespace(),
+				"secret name", secret.GetName(),
+				"vCluster namespace", v.Namespace,
+				"vCluster name", v.Name,
+			)
 			return false
 		}
 		if secret.Name != fmt.Sprintf("%s-kubeconfig", v.Name) {
-			logger.Debugf("Secret %s/%s does not match '%s-kubeconfig' pattern",
-				secret.GetNamespace(), secret.GetName(),
-				v.Name)
+			logger.V(4).Info("Secret does not match '*-kubeconfig' pattern",
+				"secret namespace", secret.GetNamespace(),
+				"secret name", secret.GetName(),
+				"vCluster name", v.Name,
+			)
 			return false
 		}
 		return true
 	default:
-		logger.Warnf("APIVersion %s unsupported for VCluster", v.APIVersion)
+		logger.V(2).Info("APIVersion unsupported for VCluster",
+			"APIVersion", v.APIVersion,
+		)
 		return false
 	}
 }

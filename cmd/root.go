@@ -8,11 +8,17 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/superorbital/capargo/internal/controller"
 	"github.com/superorbital/capargo/pkg/types"
-	"istio.io/istio/pkg/cluster"
-	"istio.io/istio/pkg/kube"
-	istiolog "istio.io/istio/pkg/log"
-	ctrl "sigs.k8s.io/controller-runtime"
-	restconfig "sigs.k8s.io/controller-runtime/pkg/client/config"
+
+	corev1 "k8s.io/api/core/v1"
+
+	"k8s.io/apimachinery/pkg/runtime"
+	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
+	"sigs.k8s.io/controller-runtime/pkg/client/config"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 )
 
 // Build information
@@ -32,12 +38,17 @@ type BuildInfo struct {
 }
 
 // Flags
-var loggingOptions = istiolog.DefaultOptions()
+var opts = zap.Options{}
 var (
 	clusterID        string
 	clusterNamespace string
 	argoNamespace    string
 	timeout          time.Duration
+)
+
+// Scheme
+var (
+	scheme = runtime.NewScheme()
 )
 
 var rootCmd = &cobra.Command{
@@ -52,8 +63,8 @@ var rootCmd = &cobra.Command{
 			Timeout:          timeout,
 		}
 		// Logger options
-		istiolog.Configure(loggingOptions)
-		logger := istiolog.RegisterScope("capargo-main", "")
+		logf.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+		logger := logf.Log.WithName("capargo-main")
 
 		// Display build information
 		b := BuildInfo{
@@ -61,38 +72,46 @@ var rootCmd = &cobra.Command{
 			GitCommit: Revision,
 			Version:   Version,
 		}
-		logger.Infof("Starting up capargo binary: version=%s, revision=%s, build time=%s",
-			b.Version,
-			b.GitCommit,
-			b.BuildTime,
+		logger.Info("Starting up capargo binary",
+			"version", b.Version,
+			"revision", b.GitCommit,
+			"build time", b.BuildTime,
 		)
 
 		// Initialize controller
-		config, err := restconfig.GetConfig()
+		mgr, err := manager.New(config.GetConfigOrDie(), manager.Options{
+			Scheme: scheme,
+		})
 		if err != nil {
-			logger.Errorf("Failed to get restconfig: %v", err)
+			logger.Error(err, "could not create manager")
 			os.Exit(1)
 		}
-		client, err := kube.NewClient(kube.NewClientConfigForRestConfig(config), cluster.ID(o.ClusterID))
+
+		err = builder.
+			ControllerManagedBy(mgr).
+			For(&clusterv1.Cluster{}).
+			Owns(&corev1.Secret{}).
+			Complete(&controller.ClusterKubeconfigReconciler{
+				Client:  mgr.GetClient(),
+				Options: o,
+			})
 		if err != nil {
-			logger.Errorf("Unable to initialize Kubernetes client: %v", err)
+			logger.Error(err, "could not create controller")
 			os.Exit(1)
 		}
-		ctx := ctrl.SetupSignalHandler()
-		coll := controller.NewCollection(ctx, client, o)
-		go coll.Synced().WaitUntilSynced(ctx.Done())
-		if !client.RunAndWait(ctx.Done()) {
-			logger.Error("Failed to start informers and sync client")
-			client.Shutdown()
+
+		if err := mgr.Start(signals.SetupSignalHandler()); err != nil {
+			logger.Error(err, "could not start manager")
 			os.Exit(1)
 		}
-		<-ctx.Done()
 	},
 }
 
 func init() {
+	_ = corev1.AddToScheme(scheme)
+	_ = clusterv1.AddToScheme(scheme)
+	opts.BindFlags(flag.CommandLine)
 	rootCmd.PersistentFlags().AddGoFlagSet(flag.CommandLine)
-	loggingOptions.AttachCobraFlags(rootCmd)
 	rootCmd.Flags().StringVar(&clusterID, "id", "kind", "The name of the cluster where capargo is located.")
 	rootCmd.Flags().StringVar(&clusterNamespace, "cluster-namespace", "", "The namespace to watch for clusters")
 	rootCmd.Flags().DurationVar(&timeout, "timeout", 5*time.Minute, "The timeout period for any update action")

@@ -3,7 +3,6 @@ package providers
 import (
 	"fmt"
 
-	"istio.io/istio/pkg/log"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -19,37 +18,51 @@ func (a awsManagedControlPlane) IsKubeconfig(secret *corev1.Secret) bool {
 	switch a.APIVersion {
 	case "controlplane.cluster.x-k8s.io/v1beta2":
 		if secret.Type != "cluster.x-k8s.io/secret" {
-			logger.Debugf("Secret %s/%s not a cluster secret",
-				secret.GetNamespace(), secret.GetName())
+			logger.V(4).Info("Secret is not a cluster secret",
+				"secret namespace", secret.GetNamespace(),
+				"secret name", secret.GetName(),
+			)
 			return false
 		}
 		ors := secret.GetOwnerReferences()
 		if len(ors) != 1 {
-			logger.Debugf("Secret %s/%s has incorrect number of owner references: %d",
-				secret.GetNamespace(), secret.GetName(), len(ors))
+			logger.V(4).Info("Secret has incorrect number of owner references",
+				"secret namespace", secret.GetNamespace(),
+				"secret name", secret.GetName(),
+				"length", len(ors),
+			)
 			return false
 		}
 		or := ors[0]
 		if or.Name != "AWSManagedControlPlane" {
-			logger.Debugf("Secret %s/%s not owned by AWSManagedControlPlane: %s",
-				secret.GetNamespace(), secret.GetName(), or.Name)
+			logger.V(4).Info("Secret is not owned by AWSManagedControlPlane",
+				"secret namespace", secret.GetNamespace(),
+				"secret name", secret.GetName(),
+				"owner reference", or.Name,
+			)
 			return false
 		}
 		if secret.Namespace != a.Namespace {
-			logger.Debugf("Secret %s/%s is not in the same namespace as AWSManagedControlPlane %s/%s",
-				secret.GetNamespace(), secret.GetName(),
-				a.Namespace, a.Name)
+			logger.V(4).Info("Secret is not in the same namespace as AWSManagedControlPlane",
+				"secret namespace", secret.GetNamespace(),
+				"secret name", secret.GetName(),
+				"AWSManagedControlPlane namespace", a.Namespace,
+				"AWSManagedControlPlane name", a.Name,
+			)
 			return false
 		}
 		if secret.Name != fmt.Sprintf("%s-user-kubeconfig", a.Name) {
-			logger.Debugf("Secret %s/%s does not match '%s-user-kubeconfig' pattern",
-				secret.GetNamespace(), secret.GetName(),
-				a.Name)
+			logger.V(4).Info("Secret does not match '*-user-kubeconfig' pattern",
+				"secret namespace", secret.GetNamespace(),
+				"secret name", secret.GetName(),
+			)
 			return false
 		}
 		return true
 	default:
-		log.Warnf("APIVersion %s unsupported for AWSManagedControlPlane", a.APIVersion)
+		logger.V(2).Info("APIVersion unsupported for AWSManagedControlPlane",
+			"APIVersion", a.APIVersion,
+		)
 		return false
 	}
 }

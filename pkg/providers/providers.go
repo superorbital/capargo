@@ -1,12 +1,12 @@
 package providers
 
 import (
-	istiolog "istio.io/istio/pkg/log"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/cluster-api/api/v1beta1"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-var logger = istiolog.RegisterScope("capargo-providers", "")
+var logger = logf.Log.WithName("capargo-providers")
 
 type provider interface {
 	IsKubeconfig(*corev1.Secret) bool
@@ -38,7 +38,7 @@ func IsCapiKubeconfig(secret *corev1.Secret, cluster *v1beta1.Cluster) bool {
 		}
 		return p.IsKubeconfig(secret)
 	default:
-		logger.Warnf("ControlPlaneRef kind %s unsupported", cluster.Spec.ControlPlaneRef.Kind)
+		logger.V(2).Info("ControlPlaneRef kind unsupported", "kind", cluster.Spec.ControlPlaneRef.Kind)
 		return false
 	}
 }
