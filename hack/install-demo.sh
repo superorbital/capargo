@@ -19,7 +19,7 @@ kubectl --kubeconfig "${kubeconfig_file}" rollout --namespace capargo status dep
 # Create vcluster cluster
 kubectl --kubeconfig "${kubeconfig_file}" create namespace vcluster
 kubectl --kubeconfig "${kubeconfig_file}" wait --for jsonpath='{.status.phase}=Active' --timeout=5s namespace/vcluster
-HELM_VALUES="service:\n  type: NodePort" clusterctl generate cluster vcluster-1 \
+HELM_VALUES="service:\n  type: NodePort\nsyncer:\n  extraArgs:\n  - --tls-san=vcluster-1.vcluster.svc" clusterctl generate cluster vcluster-1 \
   --kubeconfig "${kubeconfig_file}" \
   --infrastructure vcluster \
   --kubernetes-version v1.29.2 \
