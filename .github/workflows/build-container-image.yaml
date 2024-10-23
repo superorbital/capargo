@@ -14,7 +14,6 @@ on:
 
 jobs:
   buildx:
-    needs: setup
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
