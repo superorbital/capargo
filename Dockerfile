@@ -1,16 +1,18 @@
 # syntax=docker/dockerfile:1
-FROM golang:1.22.1 as build
+FROM golang:1.23.2 AS build
 
 ARG BUILDTIME
 ARG REVISION
 ARG VERSION
-
-# Download taskfile to run the build command
-RUN sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
+ARG GOCACHE
+ARG GOMODCACHE
 
 RUN mkdir -p /src
 COPY . /src/
 WORKDIR /src
+
+# Download taskfile to run the build command
+RUN sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
 
 # Cache go mod dependencies to speed up repeated builds
 RUN --mount=type=cache,id=${GOCACHE},target=/root/.cache/go-build \
