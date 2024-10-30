@@ -10,7 +10,12 @@ trap 'rm -f ${kubeconfig_file}' 0 2 3 15
 cluster_name="${1:-kind}"
 kind get kubeconfig --name "${cluster_name}" > "${kubeconfig_file}"
 
-kubectl --kubeconfig "${kubeconfig_file}" create namespace argocd
+cat <<EOF | kubectl --kubeconfig "${kubeconfig_file}" apply -f -
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: argocd
+EOF
 kubectl --kubeconfig "${kubeconfig_file}" wait --for jsonpath='{.status.phase}=Active' --timeout=5s namespace/argocd
 
 kubectl --kubeconfig "${kubeconfig_file}" apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
