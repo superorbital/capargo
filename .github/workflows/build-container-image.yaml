@@ -32,7 +32,7 @@ jobs:
         id: image-metadata
         uses: docker/metadata-action@v5
         env:
-          DOCKER_METADATA_ANNOTATIONS_LEVELS: manifest,index
+          DOCKER_METADATA_ANNOTATIONS_LEVELS: manifest
         with:
           images: |
             docker.io/superorbital/capargo
@@ -44,7 +44,7 @@ jobs:
             type=match,pattern=v(\d.\d).\d,group=1,prefix=v,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
             type=match,pattern=v(\d).\d.\d,group=1,prefix=v,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
           labels: |
-            org.opencontainers.image.licenses=LicenseRef-Proprietary
+            org.opencontainers.image.licenses=MIT
             org.opencontainers.image.authors=SuperOrbital, LLC
             org.opencontainers.image.description=A controller that automatically registers any Cluster API cluster in your local ArgoCD instance.
             org.opencontainers.image.documentation=https://github.com/superorbital/${{ github.event.repository.name }}/tree/${{ github.sha }}
@@ -54,7 +54,7 @@ jobs:
             org.opencontainers.image.url=https://github.com/superorbital/${{ github.event.repository.name }}/tree/${{ github.sha }}
             org.opencontainers.image.vendor=SuperOrbital, LLC
           annotations: |
-            org.opencontainers.image.licenses=LicenseRef-Proprietary
+            org.opencontainers.image.licenses=MIT
             org.opencontainers.image.authors=SuperOrbital, LLC
             org.opencontainers.image.description=A controller that automatically registers any Cluster API cluster in your local ArgoCD instance.
             org.opencontainers.image.documentation=https://github.com/superorbital/${{ github.event.repository.name }}/tree/${{ github.sha }}
