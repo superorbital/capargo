@@ -17,8 +17,8 @@ RUN sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/loc
 # Cache go mod dependencies to speed up repeated builds
 RUN --mount=type=cache,id=${GOCACHE},target=/root/.cache/go-build \
     --mount=type=cache,id=${GOMODCACHE},target=/go/pkg/mod \
-    VERSION=${VERSION} REVISION=${REVISION} BUILDTIME=${BUILDTIME} \
-    task build
+    task build \
+    VERSION=${VERSION} REVISION=${REVISION} BUILDTIME=${BUILDTIME}
 
 FROM scratch
 
