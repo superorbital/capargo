@@ -14,7 +14,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
-	"sigs.k8s.io/controller-runtime/pkg/client/config"
+	clientconfig "sigs.k8s.io/controller-runtime/pkg/client/config"
+	"sigs.k8s.io/controller-runtime/pkg/config"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -43,6 +44,7 @@ var (
 	clusterID        string
 	clusterNamespace string
 	argoNamespace    string
+	workers          int
 	timeout          time.Duration
 )
 
@@ -79,8 +81,11 @@ var rootCmd = &cobra.Command{
 		)
 
 		// Initialize controller
-		mgr, err := manager.New(config.GetConfigOrDie(), manager.Options{
+		mgr, err := manager.New(clientconfig.GetConfigOrDie(), manager.Options{
 			Scheme: scheme,
+			Controller: config.Controller{
+				MaxConcurrentReconciles: workers,
+			},
 		})
 		if err != nil {
 			logger.Error(err, "could not create manager")
@@ -113,9 +118,10 @@ func init() {
 	opts.BindFlags(flag.CommandLine)
 	rootCmd.PersistentFlags().AddGoFlagSet(flag.CommandLine)
 	rootCmd.Flags().StringVar(&clusterID, "id", "kind", "The name of the cluster where capargo is located.")
-	rootCmd.Flags().StringVar(&clusterNamespace, "cluster-namespace", "", "The namespace to watch for clusters")
-	rootCmd.Flags().DurationVar(&timeout, "timeout", 5*time.Minute, "The timeout period for any update action")
-	rootCmd.Flags().StringVar(&argoNamespace, "argo-namespace", "", "The argo namespace in which to place the secrets")
+	rootCmd.Flags().IntVar(&workers, "workers", 3, "The number of concurrent workers available to reconcile the state.")
+	rootCmd.Flags().StringVar(&clusterNamespace, "cluster-namespace", "", "The namespace to watch for clusters.")
+	rootCmd.Flags().DurationVar(&timeout, "timeout", 5*time.Minute, "The timeout period for any update action.")
+	rootCmd.Flags().StringVar(&argoNamespace, "argo-namespace", "", "The argo namespace in which to place the secrets.")
 	rootCmd.MarkFlagRequired("argo-namespace")
 }
 
