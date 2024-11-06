@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	argocdv1alpha1 "github.com/argoproj/argo-cd/v2/pkg/apis/application/v1alpha1"
 	"github.com/superorbital/capargo/pkg/providers"
 	"github.com/superorbital/capargo/pkg/types"
 	corev1 "k8s.io/api/core/v1"
@@ -156,8 +157,8 @@ func (c *ClusterKubeconfigReconciler) createOrUpdateArgoCluster(ctx context.Cont
 	return nil
 }
 
-func buildClusterConfigFromRestConfig(config *rest.Config) types.ClusterConfig {
-	var cc types.ClusterConfig
+func buildClusterConfigFromRestConfig(config *rest.Config) argocdv1alpha1.ClusterConfig {
+	var cc argocdv1alpha1.ClusterConfig
 	if config.Username != "" {
 		cc.Username = config.Username
 		cc.Password = config.Password
@@ -165,7 +166,7 @@ func buildClusterConfigFromRestConfig(config *rest.Config) types.ClusterConfig {
 	if config.BearerToken != "" {
 		cc.BearerToken = config.BearerToken
 	}
-	tlsClientConfig := types.TLSClientConfig{
+	tlsClientConfig := argocdv1alpha1.TLSClientConfig{
 		ServerName: config.TLSClientConfig.ServerName,
 		CAData:     config.TLSClientConfig.CAData,
 		CertData:   config.TLSClientConfig.CertData,
@@ -177,7 +178,7 @@ func buildClusterConfigFromRestConfig(config *rest.Config) types.ClusterConfig {
 	// TODO: AWS Auth Config
 
 	if config.ExecProvider != nil {
-		execProviderConfig := &types.ExecProviderConfig{
+		execProviderConfig := &argocdv1alpha1.ExecProviderConfig{
 			Command:     config.ExecProvider.Command,
 			Args:        config.ExecProvider.Args,
 			Env:         mapEnv(config.ExecProvider.Env),
