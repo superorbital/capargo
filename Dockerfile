@@ -24,4 +24,5 @@ FROM scratch
 
 WORKDIR /app
 COPY --from=build /src/bin/capargo /app/capargo
+USER 1001:1001
 ENTRYPOINT ["/app/capargo"]
