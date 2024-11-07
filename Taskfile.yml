@@ -1,8 +1,41 @@
 version: '3'
 
+vars:
+  LOCALBIN:
+    sh: echo "$(pwd)/bin"
+  ENVTEST: setup-envtest
+  ENVTEST_VERSION: release-0.19
+  ENVTEST_K8S_VERSION: 1.31.0
+
 tasks:
+  fmt:
+    desc: "Runs `go fmt` on the source"
+    cmds:
+    - go fmt ./...
+  vet:
+    desc: "Runs `go vet` on the source"
+    cmds:
+    - go vet ./...
+  localbin:
+    internal: true
+    cmds: 
+    - mkdir -p {{.LOCALBIN}}
+  envtest:
+    internal: true
+    deps: [localbin]
+    cmds:
+    - ./hack/download-go-tool.sh {{.LOCALBIN}} {{.ENVTEST}} sigs.k8s.io/controller-runtime/tools/setup-envtest {{.ENVTEST_VERSION}}
+  test:
+    desc: "Performs all the unit tests"
+    deps: [envtest]
+    env:
+      CGO_ENABLED: 1
+      GOEXPERIMENT: nocoverageredesign
+    cmds:
+    - KUBEBUILDER_ASSETS="$({{.LOCALBIN}}/{{.ENVTEST}} use {{.ENVTEST_K8S_VERSION}} --bin-dir {{.LOCALBIN}} -p path)" go test -race ./... -coverprofile cover.out
   build:
     desc: "Builds the capargo binary executable"
+    deps: [fmt, vet]
     vars:
       BUILDTIME: '{{default "now" .BUILDTIME}}'
       REVISION: '{{default "local" .REVISION}}'
@@ -32,7 +65,6 @@ tasks:
         --build-arg="VERSION={{.VERSION}}" \
         --build-arg="BUILDTIME={{.BUILDTIME}}" \
         --build-arg="REVISION={{.REVISION}}"
-  # test:
   # install:
   create-cluster:
     desc: "Creates a Kind cluster with a local registry and ArgoCD + Cluster API installed for testing"
