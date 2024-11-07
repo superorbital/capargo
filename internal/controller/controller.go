@@ -15,7 +15,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
-	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	capiv1beta1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -31,7 +31,7 @@ type ClusterKubeconfigReconciler struct {
 // Reconcile performs the main logic to create ArgoCD cluster secrets for
 // every managed cluster and its kubeconfig.
 func (c *ClusterKubeconfigReconciler) Reconcile(ctx context.Context, req reconcile.Request) (reconcile.Result, error) {
-	cluster := &clusterv1.Cluster{}
+	cluster := &capiv1beta1.Cluster{}
 	err := c.Get(ctx, req.NamespacedName, cluster)
 	if err != nil && !errors.IsNotFound(err) {
 		return reconcile.Result{}, err
@@ -77,7 +77,7 @@ func (c *ClusterKubeconfigReconciler) deleteArgoCluster(ctx context.Context, nam
 
 // createOrUpdateArgoCluster uploads the latest version of the cluster
 // kubeconfig as an ArgoCD cluster secret to the cluster.
-func (c *ClusterKubeconfigReconciler) createOrUpdateArgoCluster(ctx context.Context, cluster *clusterv1.Cluster) error {
+func (c *ClusterKubeconfigReconciler) createOrUpdateArgoCluster(ctx context.Context, cluster *capiv1beta1.Cluster) error {
 	// Find the kubeconfig secret located in the same namespace where the
 	// cluster's controlplaneref is.
 	cpr := cluster.Spec.ControlPlaneRef
@@ -111,8 +111,8 @@ func (c *ClusterKubeconfigReconciler) createOrUpdateArgoCluster(ctx context.Cont
 	// Create kubeconfig credentials from cluster secret
 	config, err := clientcmd.RESTConfigFromKubeConfig(configBytes)
 	if err != nil {
-		return fmt.Errorf("failed to build restconfig from the secret %s/%s for cluster %s",
-			capiSecret.Namespace, capiSecret.Name, cluster.Name)
+		return fmt.Errorf("failed to build restconfig from the secret %s/%s for cluster %s: %v",
+			capiSecret.Namespace, capiSecret.Name, cluster.Name, err)
 	}
 
 	// Build the ArgoCD secret
