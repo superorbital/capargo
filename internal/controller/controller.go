@@ -6,19 +6,20 @@ import (
 	"fmt"
 	"time"
 
-	argocdv1alpha1 "github.com/argoproj/argo-cd/v2/pkg/apis/application/v1alpha1"
 	"github.com/superorbital/capargo/pkg/providers"
 	"github.com/superorbital/capargo/pkg/types"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	argocdv1alpha1 "github.com/argoproj/argo-cd/v2/pkg/apis/application/v1alpha1"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 	capiv1beta1 "sigs.k8s.io/cluster-api/api/v1beta1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 var logger = logf.Log.WithName("capargo-controller")
@@ -78,30 +79,25 @@ func (c *ClusterKubeconfigReconciler) deleteArgoCluster(ctx context.Context, nam
 // createOrUpdateArgoCluster uploads the latest version of the cluster
 // kubeconfig as an ArgoCD cluster secret to the cluster.
 func (c *ClusterKubeconfigReconciler) createOrUpdateArgoCluster(ctx context.Context, cluster *capiv1beta1.Cluster) error {
-	// Find the kubeconfig secret located in the same namespace where the
-	// cluster's controlplaneref is.
-	cpr := cluster.Spec.ControlPlaneRef
-	secrets := &corev1.SecretList{}
-	err := c.List(ctx, secrets, client.InNamespace(cpr.Namespace))
+	// Find the kubeconfig secret.
+	capiSecret := &corev1.Secret{}
+	namespacedName, err := providers.GetCapiKubeconfigNamespacedName(cluster)
 	if err != nil {
 		return err
 	}
-	found := false
-	index := 0
-	for i, secret := range secrets.Items {
-		if providers.IsCapiKubeconfig(&secret, cluster) {
-			found = true
-			index = i
-			break
-		}
+	if err := c.Get(ctx, namespacedName, capiSecret, &client.GetOptions{}); err != nil {
+		return err
+	}
+	valid, err := providers.IsCapiKubeconfig(capiSecret, cluster)
+	if err != nil {
+		return err
 	}
 
-	if !found {
-		return fmt.Errorf("kubeconfig secret not found for cluster %s/%s", cluster.Namespace, cluster.Name)
+	// Ensure that the secret will contain a kubeconfig, and retrieve it.
+	if !valid {
+		return fmt.Errorf("secret %s does not contain kubeconfig for cluster %s/%s",
+			capiSecret.Name, cluster.Namespace, cluster.Name)
 	}
-
-	// Get the kubeconfig from the secret.
-	capiSecret := secrets.Items[index]
 	configBytes, ok := capiSecret.Data["value"]
 	if !ok {
 		return fmt.Errorf("secret %s/%s for cluster %s does not contain key \"value\"",

@@ -4,12 +4,22 @@ import (
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 type kubeadmControlPlane struct {
 	Name       string
 	Namespace  string
 	APIVersion string
+}
+
+// GetNamespacedName returns the namespace and name of a cluster
+// with a kubeadm-bootstrapped control plane.
+func (k kubeadmControlPlane) GetNamespacedName() types.NamespacedName {
+	return types.NamespacedName{
+		Name:      fmt.Sprintf("%s-kubeconfig", k.Name),
+		Namespace: k.Namespace,
+	}
 }
 
 // IsKubeconfig determines whether the secret provided is a
@@ -34,7 +44,7 @@ func (k kubeadmControlPlane) IsKubeconfig(secret *corev1.Secret) bool {
 			return false
 		}
 		or := ors[0]
-		if or.Name != "KubeadmControlPlane" {
+		if or.Kind != "KubeadmControlPlane" {
 			logger.V(4).Info("Secret is not owned by KubeadmControlPlane",
 				"secret namespace", secret.GetNamespace(),
 				"secret name", secret.GetName(),

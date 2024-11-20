@@ -4,12 +4,22 @@ import (
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 type awsManagedControlPlane struct {
 	Name       string
 	Namespace  string
 	APIVersion string
+}
+
+// GetNamespacedName returns the namespace and name of a cluster
+// with an AWS managed control plane.
+func (a awsManagedControlPlane) GetNamespacedName() types.NamespacedName {
+	return types.NamespacedName{
+		Name:      fmt.Sprintf("%s-user-kubeconfig", a.Name),
+		Namespace: a.Namespace,
+	}
 }
 
 // IsKubeconfig determines whether the secret provided is an
@@ -34,7 +44,7 @@ func (a awsManagedControlPlane) IsKubeconfig(secret *corev1.Secret) bool {
 			return false
 		}
 		or := ors[0]
-		if or.Name != "AWSManagedControlPlane" {
+		if or.Kind != "AWSManagedControlPlane" {
 			logger.V(4).Info("Secret is not owned by AWSManagedControlPlane",
 				"secret namespace", secret.GetNamespace(),
 				"secret name", secret.GetName(),

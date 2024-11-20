@@ -4,12 +4,22 @@ import (
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 type vCluster struct {
 	Name       string
 	Namespace  string
 	APIVersion string
+}
+
+// GetNamespacedName returns the namespace and name of a cluster
+// with a vcluster control plane.
+func (v vCluster) GetNamespacedName() types.NamespacedName {
+	return types.NamespacedName{
+		Name:      fmt.Sprintf("%s-kubeconfig", v.Name),
+		Namespace: v.Namespace,
+	}
 }
 
 // IsKubeconfig determines whether the secret provided is a vCluster
