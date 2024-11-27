@@ -39,7 +39,7 @@ func (c *ClusterKubeconfigReconciler) Reconcile(ctx context.Context, req reconci
 	}
 
 	// Remove the ArgoCD cluster secret if the cluster was deleted.
-	if err != nil && errors.IsNotFound(err) {
+	if errors.IsNotFound(err) {
 		return reconcile.Result{}, c.deleteArgoCluster(ctx, req.Name)
 	}
 
@@ -79,7 +79,6 @@ func (c *ClusterKubeconfigReconciler) deleteArgoCluster(ctx context.Context, nam
 // createOrUpdateArgoCluster uploads the latest version of the cluster
 // kubeconfig as an ArgoCD cluster secret to the cluster.
 func (c *ClusterKubeconfigReconciler) createOrUpdateArgoCluster(ctx context.Context, cluster *capiv1beta1.Cluster) error {
-	// Find the kubeconfig secret.
 	capiSecret := &corev1.Secret{}
 	namespacedName, err := providers.GetCapiKubeconfigNamespacedName(cluster)
 	if err != nil {
@@ -125,7 +124,11 @@ func (c *ClusterKubeconfigReconciler) createOrUpdateArgoCluster(ctx context.Cont
 			Namespace: c.ArgoNamespace,
 			Labels: map[string]string{
 				"argocd.argoproj.io/secret-type": "cluster",
-				"controller":                     "capargo",
+				types.ControllerNameLabel:        "capargo",
+			},
+			Annotations: map[string]string{
+				types.SecretNameAnnotation:      cluster.Name,
+				types.SecretNamespaceAnnotation: cluster.Namespace,
 			},
 		},
 		StringData: map[string]string{
