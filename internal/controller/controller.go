@@ -14,6 +14,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	argocdcommon "github.com/argoproj/argo-cd/v2/common"
 	argocdv1alpha1 "github.com/argoproj/argo-cd/v2/pkg/apis/application/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -123,8 +124,8 @@ func (c *ClusterKubeconfigReconciler) createOrUpdateArgoCluster(ctx context.Cont
 			Name:      cluster.Name,
 			Namespace: c.ArgoNamespace,
 			Labels: map[string]string{
-				"argocd.argoproj.io/secret-type": "cluster",
-				types.ControllerNameLabel:        "capargo",
+				argocdcommon.LabelKeySecretType: argocdcommon.LabelValueSecretTypeCluster,
+				types.ControllerNameLabel:       "capargo",
 			},
 			Annotations: map[string]string{
 				types.SecretNameAnnotation:      cluster.Name,
