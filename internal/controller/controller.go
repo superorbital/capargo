@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"time"
 
 	"github.com/superorbital/capargo/pkg/common"
@@ -127,34 +128,38 @@ func (c *ClusterKubeconfigReconciler) createOrUpdateArgoCluster(ctx context.Cont
 			Labels: map[string]string{
 				argocdcommon.LabelKeySecretType: argocdcommon.LabelValueSecretTypeCluster,
 				common.ControllerNameLabel:      common.ControllerName,
-			},
-			Annotations: map[string]string{
-				common.SecretNameAnnotation:      cluster.Name,
-				common.SecretNamespaceAnnotation: cluster.Namespace,
+				common.ClusterNameLabel:         cluster.Name,
+				common.ClusterNamespaceLabel:    cluster.Namespace,
 			},
 		},
-		StringData: map[string]string{
-			"name":   cluster.Name,
-			"server": config.Host,
-			"config": string(ccJson),
+		Data: map[string][]byte{
+			"name":   []byte(cluster.Name),
+			"server": []byte(config.Host),
+			"config": ccJson,
 		},
 	}
 
-	action := "Created ArgoCD cluster secret"
-	err = c.Create(ctx, &argoClusterSecret, &client.CreateOptions{})
-	if err != nil && !errors.IsAlreadyExists(err) {
+	existingArgoClusterSecret := corev1.Secret{}
+	err = c.Get(ctx, client.ObjectKeyFromObject(&argoClusterSecret), &existingArgoClusterSecret, &client.GetOptions{})
+	if err != nil && !errors.IsNotFound(err) {
 		return err
 	}
 
-	if err != nil && errors.IsAlreadyExists(err) {
-		action = "Updated ArgoCD cluster secret"
-		err = c.Update(ctx, &argoClusterSecret, &client.UpdateOptions{})
-		if err != nil {
+	if errors.IsNotFound(err) {
+		if err := c.Create(ctx, &argoClusterSecret, &client.CreateOptions{}); err != nil {
 			return err
+		}
+		logger.V(4).Info("Created ArgoCD cluster", "cluster", cluster)
+	} else {
+		if !reflect.DeepEqual(existingArgoClusterSecret.Labels, argoClusterSecret.Labels) ||
+			!reflect.DeepEqual(existingArgoClusterSecret.Data, argoClusterSecret.Data) {
+			if err := c.Update(ctx, &argoClusterSecret, &client.UpdateOptions{}); err != nil {
+				return err
+			}
+			logger.V(4).Info("Updated ArgoCD cluster", "cluster", cluster)
 		}
 	}
 
-	logger.V(4).Info(action, "cluster", cluster)
 	return nil
 }
 
