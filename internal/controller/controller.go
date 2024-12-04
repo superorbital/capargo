@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/superorbital/capargo/pkg/common"
 	"github.com/superorbital/capargo/pkg/providers"
 	"github.com/superorbital/capargo/pkg/types"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -125,11 +126,11 @@ func (c *ClusterKubeconfigReconciler) createOrUpdateArgoCluster(ctx context.Cont
 			Namespace: c.ArgoNamespace,
 			Labels: map[string]string{
 				argocdcommon.LabelKeySecretType: argocdcommon.LabelValueSecretTypeCluster,
-				types.ControllerNameLabel:       "capargo",
+				common.ControllerNameLabel:      common.ControllerName,
 			},
 			Annotations: map[string]string{
-				types.SecretNameAnnotation:      cluster.Name,
-				types.SecretNamespaceAnnotation: cluster.Namespace,
+				common.SecretNameAnnotation:      cluster.Name,
+				common.SecretNamespaceAnnotation: cluster.Namespace,
 			},
 		},
 		StringData: map[string]string{

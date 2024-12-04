@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/superorbital/capargo/internal/controller"
+	"github.com/superorbital/capargo/pkg/common"
 	"github.com/superorbital/capargo/pkg/types"
 
 	corev1 "k8s.io/api/core/v1"
@@ -105,13 +106,13 @@ var rootCmd = &cobra.Command{
 				handler.EnqueueRequestsFromMapFunc(
 					func(ctx context.Context, obj client.Object) []reconcile.Request {
 						s := obj.(*corev1.Secret)
-						if _, ok := s.Labels[types.ControllerNameLabel]; ok {
+						if _, ok := s.Labels[common.ControllerNameLabel]; ok {
 							var name string
 							var namespace string
-							if name, ok = s.Annotations[types.SecretNameAnnotation]; !ok {
+							if name, ok = s.Annotations[common.SecretNameAnnotation]; !ok {
 								return nil
 							}
-							if namespace, ok = s.Annotations[types.SecretNamespaceAnnotation]; !ok {
+							if namespace, ok = s.Annotations[common.SecretNamespaceAnnotation]; !ok {
 								return nil
 							}
 							return []reconcile.Request{
