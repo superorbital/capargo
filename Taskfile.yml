@@ -82,6 +82,7 @@ tasks:
     - ./hack/get-kubeconfig.sh test-capargo
   demo-install:
     desc: "Installs the demo of capargo with a CAPV cluster on the Kind cluster"
+    deps: [localbin]
     cmds:
     - ./hack/install-demo.sh test-capargo
   demo-uninstall:

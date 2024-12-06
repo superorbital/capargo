@@ -4,7 +4,6 @@ set -eou pipefail
 [ -x kind ] && echo "Please install kind before continuing, see README.md for instructions" >&2 && exit 1
 [ -x kubectl ] && echo "Please install kubectl before continuing, see README.md for instructions" >&2 && exit 1
 [ -x argocd ] && echo "Please install argocd before continuing, see README.md for instructions" >&2 && exit 1
-[ -x vcluster ] && echo "Please install vcluster before continuing, see README.md for instructions" >&2 && exit 1
 
 kubeconfig_file="$(mktemp)"
 trap 'rm -f ${kubeconfig_file}' 0 2 3 15
@@ -20,6 +19,20 @@ kubectl --kubeconfig "${kubeconfig_file}" rollout --namespace capargo status dep
 VCLUSTER_NAME=vcluster-1
 VCLUSTER_NAMESPACE=vcluster
 CHART_VERSION=0.19.7
+
+VCLUSTER_CLI_VERSION=v0.19.7
+VCLUSTER_CLI=bin/vcluster
+
+if [ ! -f "${VCLUSTER_CLI}" ]; then
+  vcluster_binary="vcluster-$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)"
+  echo "Downloading ${vcluster_binary}@${VCLUSTER_CLI_VERSION}"
+  curl --location \
+       --silent \
+       --fail \
+       --output "${VCLUSTER_CLI}" \
+       "https://github.com/loft-sh/vcluster/releases/download/${VCLUSTER_CLI_VERSION}/${vcluster_binary}"
+  chmod 755 bin/vcluster
+fi
 
 cat <<EOF | kubectl --kubeconfig "${kubeconfig_file}" apply -f -
 apiVersion: v1
@@ -83,6 +96,6 @@ KUBECONFIG="${kubeconfig_file}" argocd app create guestbook \
   --sync-policy=automated
 
 # Wait until vcluster has the Application deployed to it
-KUBECONFIG="${kubeconfig_file}" vcluster connect "${VCLUSTER_NAME}" --namespace "${VCLUSTER_NAMESPACE}"
+KUBECONFIG="${kubeconfig_file}" "${VCLUSTER_CLI}" connect "${VCLUSTER_NAME}" --namespace "${VCLUSTER_NAMESPACE}"
 KUBECONFIG="${kubeconfig_file}" kubectl rollout status deployment guestbook-ui
-KUBECONFIG="${kubeconfig_file}" vcluster disconnect
+KUBECONFIG="${kubeconfig_file}" "${VCLUSTER_CLI}" disconnect
