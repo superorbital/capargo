@@ -1,0 +1,167 @@
+package providers
+
+import (
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+
+	"github.com/google/uuid"
+	"k8s.io/apimachinery/pkg/types"
+
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	capiv1beta1 "sigs.k8s.io/cluster-api/api/v1beta1"
+)
+
+var _ = Describe("Kubeadm provider tests", func() {
+	When("handling a supported kubeadm cluster", func() {
+		var clusterName = "kubeadm-cluster"
+		var clusterNamespace = "kubeadm-cluster-namespace"
+		cluster := capiv1beta1.Cluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      clusterName,
+				Namespace: clusterNamespace,
+				UID:       types.UID(uuid.New().String()),
+			},
+			Spec: capiv1beta1.ClusterSpec{
+				ControlPlaneRef: &corev1.ObjectReference{
+					APIVersion: "controlplane.cluster.x-k8s.io/v1beta1",
+					Kind:       "KubeadmControlPlane",
+					Name:       clusterName,
+					Namespace:  clusterNamespace,
+				},
+			},
+		}
+
+		// Missing secret type
+		var badConfig1 = corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      clusterName + "-kubeconfig",
+				Namespace: clusterNamespace,
+				OwnerReferences: []metav1.OwnerReference{
+					{
+						APIVersion:         "controlplane.cluster.x-k8s.io/v1beta1",
+						BlockOwnerDeletion: func(v bool) *bool { return &v }(true),
+						Controller:         func(v bool) *bool { return &v }(true),
+						Kind:               "KubeadmControlPlane",
+						UID:                cluster.GetUID(),
+					},
+				},
+			},
+			Data: map[string][]byte{},
+		}
+
+		// Multiple owner references
+		var badConfig2 = corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      clusterName + "-kubeconfig",
+				Namespace: clusterNamespace,
+				OwnerReferences: []metav1.OwnerReference{
+					{
+						APIVersion:         "controlplane.cluster.x-k8s.io/v1beta1",
+						BlockOwnerDeletion: func(v bool) *bool { return &v }(true),
+						Controller:         func(v bool) *bool { return &v }(true),
+						Kind:               "KubeadmControlPlane",
+						UID:                cluster.GetUID(),
+					},
+					{
+						APIVersion:         "controlplane.cluster.x-k8s.io/v1beta1",
+						BlockOwnerDeletion: func(v bool) *bool { return &v }(true),
+						Controller:         func(v bool) *bool { return &v }(true),
+						Kind:               "KubeadmControlPlane",
+						UID:                cluster.GetUID(),
+					},
+				},
+			},
+			Type: "cluster.x-k8s.io/secret",
+			Data: map[string][]byte{},
+		}
+
+		// Fake kind
+		var badConfig3 = corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      clusterName + "-kubeconfig",
+				Namespace: clusterNamespace,
+				OwnerReferences: []metav1.OwnerReference{
+					{
+						APIVersion:         "controlplane.cluster.x-k8s.io/v1beta1",
+						BlockOwnerDeletion: func(v bool) *bool { return &v }(true),
+						Controller:         func(v bool) *bool { return &v }(true),
+						Kind:               "FakeKind",
+						UID:                cluster.GetUID(),
+					},
+				},
+			},
+			Type: "cluster.x-k8s.io/secret",
+			Data: map[string][]byte{},
+		}
+
+		var p = kubeadmControlPlane{
+			APIVersion: cluster.Spec.ControlPlaneRef.APIVersion,
+			Name:       cluster.Spec.ControlPlaneRef.Name,
+			Namespace:  cluster.Spec.ControlPlaneRef.Namespace,
+		}
+
+		It("should reject all invalid kubeconfigs", func() {
+			var validated bool
+			By("providing kubeconfig secrets with bad configs")
+			validated = p.IsKubeconfig(&badConfig1)
+			Expect(validated).To(BeFalse())
+			validated = p.IsKubeconfig(&badConfig2)
+			Expect(validated).To(BeFalse())
+			validated = p.IsKubeconfig(&badConfig3)
+			Expect(validated).To(BeFalse())
+		})
+	})
+
+	When("handling an unsupported kubeadm cluster", func() {
+		var clusterName = "kubeadm-cluster"
+		var clusterNamespace = "kubeadm-cluster-namespace"
+		// Unsupported API version
+		cluster := capiv1beta1.Cluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      clusterName,
+				Namespace: clusterNamespace,
+				UID:       types.UID(uuid.New().String()),
+			},
+			Spec: capiv1beta1.ClusterSpec{
+				ControlPlaneRef: &corev1.ObjectReference{
+					APIVersion: "controlplane.cluster.x-k8s.io/v1beta2",
+					Kind:       "KubeadmControlPlane",
+					Name:       clusterName,
+					Namespace:  clusterNamespace,
+				},
+			},
+		}
+
+		var kubeconfig = corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      clusterName + "-kubeconfig",
+				Namespace: clusterNamespace,
+				OwnerReferences: []metav1.OwnerReference{
+					{
+						APIVersion:         "controlplane.cluster.x-k8s.io/v1beta1",
+						BlockOwnerDeletion: func(v bool) *bool { return &v }(true),
+						Controller:         func(v bool) *bool { return &v }(true),
+						Kind:               "KubeadmControlPlane",
+						UID:                cluster.GetUID(),
+					},
+				},
+			},
+			Type: "cluster.x-k8s.io/secret",
+			Data: map[string][]byte{},
+		}
+
+		var p = kubeadmControlPlane{
+			APIVersion: cluster.Spec.ControlPlaneRef.APIVersion,
+			Name:       cluster.Spec.ControlPlaneRef.Name,
+			Namespace:  cluster.Spec.ControlPlaneRef.Namespace,
+		}
+
+		It("should reject the unsupported cluster", func() {
+			var validated bool
+			By("trying to validate the kubeconfig")
+			validated = p.IsKubeconfig(&kubeconfig)
+			Expect(validated).To(BeFalse())
+		})
+	})
+})

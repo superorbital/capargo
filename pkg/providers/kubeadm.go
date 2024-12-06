@@ -3,9 +3,14 @@ package providers
 import (
 	"fmt"
 
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
+
+	corev1 "k8s.io/api/core/v1"
+	clusterv1beta1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	kubeadmv1beta1 "sigs.k8s.io/cluster-api/controlplane/kubeadm/api/v1beta1"
 )
+
+var kubeadmControlPlaneAPIVersion = fmt.Sprintf("%s/%s", kubeadmv1beta1.GroupVersion.Group, kubeadmv1beta1.GroupVersion.Version)
 
 type kubeadmControlPlane struct {
 	Name       string
@@ -26,11 +31,12 @@ func (k kubeadmControlPlane) GetNamespacedName() types.NamespacedName {
 // KubeadmControlPlane kubeconfig or not.
 func (k kubeadmControlPlane) IsKubeconfig(secret *corev1.Secret) bool {
 	switch k.APIVersion {
-	case "controlplane.cluster.x-k8s.io/v1beta1":
-		if secret.Type != "cluster.x-k8s.io/secret" {
+	case kubeadmControlPlaneAPIVersion:
+		if secret.Type != clusterv1beta1.ClusterSecretType {
 			logger.V(4).Info("Secret is not a cluster secret",
 				"secret namespace", secret.GetNamespace(),
 				"secret name", secret.GetName(),
+				"secret type", secret.Type,
 			)
 			return false
 		}
@@ -44,27 +50,11 @@ func (k kubeadmControlPlane) IsKubeconfig(secret *corev1.Secret) bool {
 			return false
 		}
 		or := ors[0]
-		if or.Kind != "KubeadmControlPlane" {
+		if or.Kind != string(kubeadmKind) {
 			logger.V(4).Info("Secret is not owned by KubeadmControlPlane",
 				"secret namespace", secret.GetNamespace(),
 				"secret name", secret.GetName(),
 				"owner reference", or.Name,
-			)
-			return false
-		}
-		if secret.Namespace != k.Namespace {
-			logger.V(4).Info("Secret is not in the same namespace as KubeadmControlPlane",
-				"secret namespace", secret.GetNamespace(),
-				"secret name", secret.GetName(),
-				"KubeadmControlPlane namespace", k.Namespace,
-				"KubeadmControlPlane name", k.Name,
-			)
-			return false
-		}
-		if secret.Name != fmt.Sprintf("%s-kubeconfig", k.Name) {
-			logger.V(4).Info("Secret does not match '*-kubeconfig' pattern",
-				"secret namespace", secret.GetNamespace(),
-				"secret name", secret.GetName(),
 			)
 			return false
 		}
