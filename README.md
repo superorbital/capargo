@@ -27,7 +27,6 @@ You will need the following tools installed in your computer for local developme
  - [Kind](https://kind.sigs.k8s.io/)
  - [kubectl CLI](https://kubernetes.io/docs/tasks/tools/#kubectl)
  - [clusterctl CLI](https://cluster-api.sigs.k8s.io/user/quick-start.html#install-clusterctl)
- - [ArgoCD CLI](https://argo-cd.readthedocs.io/en/stable/cli_installation/)
 
 ### Building
 
