@@ -12,6 +12,6 @@ cluster_name="${1:-kind}"
 kind get kubeconfig --name "${cluster_name}" > "${kubeconfig_file}"
 
 kubectl --kubeconfig "${kubeconfig_file}" delete application -n argocd guestbook --ignore-not-found
-kubectl --kubeconfig "${kubeconfig_file}" delete namespace capargo --ignore-not-found
 kubectl --kubeconfig "${kubeconfig_file}" delete cluster -n vcluster vcluster-1 --ignore-not-found
 kubectl --kubeconfig "${kubeconfig_file}" delete namespace vcluster --ignore-not-found
+kubectl --kubeconfig "${kubeconfig_file}" delete namespace capargo --ignore-not-found
