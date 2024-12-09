@@ -109,10 +109,10 @@ var rootCmd = &cobra.Command{
 						if _, ok := s.Labels[common.ControllerNameLabel]; ok {
 							var name string
 							var namespace string
-							if name, ok = s.Labels[common.ClusterNameLabel]; !ok {
+							if name, ok = s.Annotations[common.ClusterNameAnnotation]; !ok {
 								return nil
 							}
-							if namespace, ok = s.Labels[common.ClusterNamespaceLabel]; !ok {
+							if namespace, ok = s.Annotations[common.ClusterNamespaceAnnotation]; !ok {
 								return nil
 							}
 							return []reconcile.Request{

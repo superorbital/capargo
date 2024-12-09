@@ -35,15 +35,17 @@ type ClusterKubeconfigReconciler struct {
 // Reconcile performs the main logic to create ArgoCD cluster secrets for
 // every managed cluster and its kubeconfig.
 func (c *ClusterKubeconfigReconciler) Reconcile(ctx context.Context, req reconcile.Request) (reconcile.Result, error) {
+	logger = logf.FromContext(ctx)
 	cluster := &capiv1beta1.Cluster{}
 	err := c.Get(ctx, req.NamespacedName, cluster)
 	if err != nil && !errors.IsNotFound(err) {
 		return reconcile.Result{}, err
 	}
+	logger.V(4).Info("Cluster received")
 
 	// Remove the ArgoCD cluster secret if the cluster was deleted.
 	if errors.IsNotFound(err) {
-		return reconcile.Result{}, c.deleteArgoCluster(ctx, req.Name)
+		return reconcile.Result{}, c.deleteArgoCluster(ctx, req)
 	}
 
 	// Wait until control plane is ready and our kubeconfig has been generated
@@ -53,27 +55,25 @@ func (c *ClusterKubeconfigReconciler) Reconcile(ctx context.Context, req reconci
 			RequeueAfter: 10 * time.Second,
 		}, nil
 	}
-	logger.V(4).Info("Cluster received", "cluster", cluster)
 
 	return reconcile.Result{}, c.createOrUpdateArgoCluster(ctx, cluster)
 }
 
 // deleteArgoCluster removes the ArgoCD cluster secret from the cluster.
-func (c *ClusterKubeconfigReconciler) deleteArgoCluster(ctx context.Context, name string) error {
-	err := c.Delete(ctx,
-		&corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      name,
-				Namespace: c.ArgoNamespace,
-			},
-		}, &client.DeleteOptions{},
-	)
-
+func (c *ClusterKubeconfigReconciler) deleteArgoCluster(ctx context.Context, req reconcile.Request) error {
+	secret := corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      req.Namespace + "-" + req.Name,
+			Namespace: c.ArgoNamespace,
+		},
+	}
+	err := c.Delete(ctx, &secret, &client.DeleteOptions{})
 	if err != nil && !errors.IsNotFound(err) {
 		return err
 	}
-	logger.V(4).Info("Deleted ArgoCD cluster secret",
-		"secret namespace", c.ArgoNamespace, "secret name", name,
+
+	logger.Info("Deleted ArgoCD cluster secret",
+		"secret namespace", secret.GetNamespace(), "secret name", secret.GetName(),
 	)
 
 	return nil
@@ -97,39 +97,43 @@ func (c *ClusterKubeconfigReconciler) createOrUpdateArgoCluster(ctx context.Cont
 
 	// Ensure that the secret will contain a kubeconfig, and retrieve it.
 	if !valid {
-		return fmt.Errorf("secret %s does not contain kubeconfig for cluster %s/%s",
-			capiSecret.Name, cluster.Namespace, cluster.Name)
+		return fmt.Errorf("secret %s does not contain kubeconfig",
+			capiSecret.Name,
+		)
 	}
 	configBytes, ok := capiSecret.Data["value"]
 	if !ok {
-		return fmt.Errorf("secret %s/%s for cluster %s does not contain key \"value\"",
-			capiSecret.Namespace, capiSecret.Name, cluster.Name)
+		return fmt.Errorf("secret %s/%s does not contain key \"value\"",
+			capiSecret.Namespace, capiSecret.Name,
+		)
 	}
 
 	// Create kubeconfig credentials from cluster secret
 	config, err := clientcmd.RESTConfigFromKubeConfig(configBytes)
 	if err != nil {
-		return fmt.Errorf("failed to build restconfig from the secret %s/%s for cluster %s: %v",
-			capiSecret.Namespace, capiSecret.Name, cluster.Name, err)
+		return fmt.Errorf("failed to build restconfig from the secret %s/%s: %v",
+			capiSecret.Namespace, capiSecret.Name, err,
+		)
 	}
 
 	// Build the ArgoCD secret
 	clusterConfig := buildClusterConfigFromRestConfig(config)
 	ccJson, err := json.Marshal(clusterConfig)
 	if err != nil {
-		return fmt.Errorf("could not marshal cluster config for cluster %s/%s",
-			cluster.Namespace, cluster.Name)
+		return fmt.Errorf("could not marshal cluster config: %v", err)
 	}
 
-	argoClusterSecret := corev1.Secret{
+	newArgoClusterSecret := corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      cluster.Name,
+			Name:      cluster.Namespace + "-" + cluster.Name,
 			Namespace: c.ArgoNamespace,
+			Annotations: map[string]string{
+				common.ClusterNameAnnotation:      cluster.Name,
+				common.ClusterNamespaceAnnotation: cluster.Namespace,
+			},
 			Labels: map[string]string{
 				argocdcommon.LabelKeySecretType: argocdcommon.LabelValueSecretTypeCluster,
 				common.ControllerNameLabel:      common.ControllerName,
-				common.ClusterNameLabel:         cluster.Name,
-				common.ClusterNamespaceLabel:    cluster.Namespace,
 			},
 		},
 		Data: map[string][]byte{
@@ -139,24 +143,29 @@ func (c *ClusterKubeconfigReconciler) createOrUpdateArgoCluster(ctx context.Cont
 		},
 	}
 
-	existingArgoClusterSecret := corev1.Secret{}
-	err = c.Get(ctx, client.ObjectKeyFromObject(&argoClusterSecret), &existingArgoClusterSecret, &client.GetOptions{})
+	currentArgoClusterSecret := corev1.Secret{}
+	err = c.Get(
+		ctx,
+		client.ObjectKeyFromObject(&newArgoClusterSecret),
+		&currentArgoClusterSecret,
+		&client.GetOptions{},
+	)
 	if err != nil && !errors.IsNotFound(err) {
 		return err
 	}
 
 	if errors.IsNotFound(err) {
-		if err := c.Create(ctx, &argoClusterSecret, &client.CreateOptions{}); err != nil {
+		if err := c.Create(ctx, &newArgoClusterSecret, &client.CreateOptions{}); err != nil {
 			return err
 		}
-		logger.V(4).Info("Created ArgoCD cluster", "cluster", cluster)
+		logger.Info("Created ArgoCD cluster", "secret", newArgoClusterSecret.GetName())
 	} else {
-		if !reflect.DeepEqual(existingArgoClusterSecret.Labels, argoClusterSecret.Labels) ||
-			!reflect.DeepEqual(existingArgoClusterSecret.Data, argoClusterSecret.Data) {
-			if err := c.Update(ctx, &argoClusterSecret, &client.UpdateOptions{}); err != nil {
+		if !reflect.DeepEqual(currentArgoClusterSecret.Data, newArgoClusterSecret.Data) ||
+			currentArgoClusterSecret.Labels[argocdcommon.LabelValueSecretTypeCluster] != newArgoClusterSecret.Labels[argocdcommon.LabelValueSecretTypeCluster] {
+			if err := c.Update(ctx, &newArgoClusterSecret, &client.UpdateOptions{}); err != nil {
 				return err
 			}
-			logger.V(4).Info("Updated ArgoCD cluster", "cluster", cluster)
+			logger.Info("Updated ArgoCD cluster", "secret", newArgoClusterSecret.GetName())
 		}
 	}
 
