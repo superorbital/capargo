@@ -9,12 +9,6 @@ spec:
     spec:
       containers:
       - name: capargo
-        args:
-          - --argo-namespace=argocd
-          - --cluster-namespace=vcluster
-          - --zap-log-level=4
-        image: localhost:5001/superorbital/capargo:local
-        imagePullPolicy: Always
         resources:
           limits:
             cpu: 500m

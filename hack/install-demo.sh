@@ -39,7 +39,7 @@ cluster_name="${1:-kind}"
 kind get kubeconfig --name "${cluster_name}" > "${kubeconfig_file}"
 
 # Deploy capargo
-kubectl --kubeconfig "${kubeconfig_file}" apply -k manifests/kustomize
+kubectl --kubeconfig "${kubeconfig_file}" apply -k manifests/overlays/local
 kubectl --kubeconfig "${kubeconfig_file}" rollout --namespace capargo status deployment capargo
 
 # Install vcluster binary

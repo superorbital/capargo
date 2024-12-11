@@ -2,3 +2,4 @@
 *.kubeconfig
 bin/*
 cover.out
+_output

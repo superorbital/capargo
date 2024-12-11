@@ -1,0 +1,17 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: capargo
+spec:
+  selector: {}
+  template:
+    spec:
+      containers:
+      - name: capargo
+        args:
+          - --argo-namespace=argocd
+        image: superorbital/capargo:latest
+        resources:
+          limits:
+            cpu: 500m
+            memory: 1G
