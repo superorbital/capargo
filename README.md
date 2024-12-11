@@ -16,7 +16,7 @@ To install the latest released version of the controller from the _install.yaml_
 manifest, run the following command:
 
 ```shell
-kubectl apply -f https://github.com/superorbital/capargo/releases/latest/download/components.yaml
+kubectl apply -f https://github.com/superorbital/capargo/releases/latest/download/install.yaml
 ```
 
 Installation instructions for previous releases can be found in
