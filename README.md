@@ -6,9 +6,29 @@ The `capargo` controller (**C**luster **AP**I for **Argo**CD) performs the
 tedious task of adding a new Cluster API cluster in the ArgoCD installation
 that's running on the same cluster. This allows for a seamless experience
 between the creation of a new cluster, and the cluster having all the necessary
-workloads installed and maintained by ArgoCD
+workloads installed and maintained by ArgoCD.
 
 ## Installation
+
+The `capargo` controller can be installed either directly from a YAML manifest
+or via kustomize templates in the `manifests` [directory](https://github.com/superorbital/capargo/tree/main/manifests). 
+To install the latest released version of the controller from the _install.yaml_
+manifest, run the following command:
+
+```shell
+kubectl apply -f https://github.com/superorbital/capargo/releases/latest/download/components.yaml
+```
+
+Installation instructions for previous releases can be found in
+[capargo releases](https://github.com/superorbital/capargo/releases).
+
+>[!NOTE]
+> The default installation assumes that ArgoCD is installed in the `argocd`
+namespace. This needs to be changed if your cluster's ArgoCD installation is
+in a different namespace. This is controlled by the `--argo-namespace` flag on
+the `capargo` binary.
+
+## Support Matrix
 
 TODO
 
