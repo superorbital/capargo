@@ -30,7 +30,10 @@ the `capargo` binary.
 
 ## Support Matrix
 
-TODO
+Provider Cluster | Control Plane API group/version             | Supported?
+-----------------|---------------------------------------------|-------------
+VCluster         | `infrastructure.cluster.x-k8s.io/v1alpha1`  | Yes
+AWSCluster       | `controlplane.cluster.x-k8s.io/v1beta1`     | Yes
 
 ## Development
 

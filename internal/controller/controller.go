@@ -144,12 +144,7 @@ func (c *ClusterKubeconfigReconciler) createOrUpdateArgoCluster(ctx context.Cont
 	}
 
 	currentArgoClusterSecret := corev1.Secret{}
-	err = c.Get(
-		ctx,
-		client.ObjectKeyFromObject(&newArgoClusterSecret),
-		&currentArgoClusterSecret,
-		&client.GetOptions{},
-	)
+	err = c.Get(ctx, client.ObjectKeyFromObject(&newArgoClusterSecret), &currentArgoClusterSecret, &client.GetOptions{})
 	if err != nil && !errors.IsNotFound(err) {
 		return err
 	}

@@ -35,9 +35,11 @@ func getProvider(cluster *clusterv1beta1.Cluster) (provider, error) {
 	switch controlPlaneRefKind(cluster.Spec.ControlPlaneRef.Kind) {
 	case kubeadmKind:
 		var p provider = kubeadmControlPlane{
-			APIVersion: cluster.Spec.ControlPlaneRef.APIVersion,
-			Name:       cluster.Spec.ControlPlaneRef.Name,
-			Namespace:  cluster.Spec.ControlPlaneRef.Namespace,
+			APIVersion:       cluster.Spec.ControlPlaneRef.APIVersion,
+			ControlPlaneName: cluster.Spec.ControlPlaneRef.Name,
+			Namespace:        cluster.Spec.ControlPlaneRef.Namespace,
+			ClusterName:      cluster.Name,
+			UID:              cluster.UID,
 		}
 		return p, nil
 	case awsManagedKind:

@@ -2,27 +2,31 @@ package providers
 
 import (
 	"fmt"
+	"reflect"
 
 	"k8s.io/apimachinery/pkg/types"
 
 	corev1 "k8s.io/api/core/v1"
-	clusterv1beta1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	capiv1beta1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	kubeadmv1beta1 "sigs.k8s.io/cluster-api/controlplane/kubeadm/api/v1beta1"
 )
 
-var kubeadmControlPlaneAPIVersion = fmt.Sprintf("%s/%s", kubeadmv1beta1.GroupVersion.Group, kubeadmv1beta1.GroupVersion.Version)
+var v1beta1KubeadmControlPlane = fmt.Sprintf("%s/%s", kubeadmv1beta1.GroupVersion.Group, kubeadmv1beta1.GroupVersion.Version)
 
 type kubeadmControlPlane struct {
-	Name       string
-	Namespace  string
-	APIVersion string
+	ControlPlaneName string
+	ClusterName      string
+	Namespace        string
+	APIVersion       string
+	UID              types.UID
 }
 
 // GetNamespacedName returns the namespace and name of a cluster
 // with a kubeadm-bootstrapped control plane.
 func (k kubeadmControlPlane) GetNamespacedName() types.NamespacedName {
 	return types.NamespacedName{
-		Name:      fmt.Sprintf("%s-kubeconfig", k.Name),
+		Name:      fmt.Sprintf("%s-kubeconfig", k.ClusterName),
 		Namespace: k.Namespace,
 	}
 }
@@ -31,12 +35,21 @@ func (k kubeadmControlPlane) GetNamespacedName() types.NamespacedName {
 // KubeadmControlPlane kubeconfig or not.
 func (k kubeadmControlPlane) IsKubeconfig(secret *corev1.Secret) bool {
 	switch k.APIVersion {
-	case kubeadmControlPlaneAPIVersion:
-		if secret.Type != clusterv1beta1.ClusterSecretType {
+	case v1beta1KubeadmControlPlane:
+		if secret.Type != capiv1beta1.ClusterSecretType {
 			logger.V(4).Info("Secret is not a cluster secret",
 				"secret namespace", secret.GetNamespace(),
 				"secret name", secret.GetName(),
 				"secret type", secret.Type,
+			)
+			return false
+		}
+		name := secret.Labels[capiv1beta1.ClusterNameLabel]
+		if name != k.ClusterName {
+			logger.V(4).Info("Secret cluster name label does not contain cluster name",
+				"secret namespace", secret.GetNamespace(),
+				"secret name", secret.GetName(),
+				"cluster label name", name,
 			)
 			return false
 		}
@@ -49,12 +62,18 @@ func (k kubeadmControlPlane) IsKubeconfig(secret *corev1.Secret) bool {
 			)
 			return false
 		}
-		or := ors[0]
-		if or.Kind != string(kubeadmKind) {
+		if !reflect.DeepEqual(metav1.OwnerReference{
+			APIVersion:         k.APIVersion,
+			BlockOwnerDeletion: func(v bool) *bool { return &v }(true),
+			Controller:         func(v bool) *bool { return &v }(true),
+			Kind:               string(kubeadmKind),
+			Name:               k.ControlPlaneName,
+			UID:                k.UID,
+		}, ors[0]) {
 			logger.V(4).Info("Secret is not owned by KubeadmControlPlane",
 				"secret namespace", secret.GetNamespace(),
 				"secret name", secret.GetName(),
-				"owner reference", or.Name,
+				"owner reference", ors[0],
 			)
 			return false
 		}

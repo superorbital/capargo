@@ -26,7 +26,7 @@ var _ = Describe("Provider functions", func() {
 				ControlPlaneRef: &corev1.ObjectReference{
 					APIVersion: "controlplane.cluster.x-k8s.io/v1beta1",
 					Kind:       "KubeadmControlPlane",
-					Name:       clusterName,
+					Name:       clusterName + "-control-plane",
 					Namespace:  clusterNamespace,
 				},
 			},
@@ -36,17 +36,21 @@ var _ = Describe("Provider functions", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      clusterName + "-kubeconfig",
 				Namespace: clusterNamespace,
+				Labels: map[string]string{
+					capiv1beta1.ClusterNameLabel: clusterName,
+				},
 				OwnerReferences: []metav1.OwnerReference{
 					{
-						APIVersion:         "controlplane.cluster.x-k8s.io/v1beta1",
+						APIVersion:         cluster.Spec.ControlPlaneRef.APIVersion,
 						BlockOwnerDeletion: func(v bool) *bool { return &v }(true),
 						Controller:         func(v bool) *bool { return &v }(true),
-						Kind:               "KubeadmControlPlane",
+						Kind:               cluster.Spec.ControlPlaneRef.Kind,
+						Name:               cluster.Spec.ControlPlaneRef.Name,
 						UID:                cluster.GetUID(),
 					},
 				},
 			},
-			Type: "cluster.x-k8s.io/secret",
+			Type: capiv1beta1.ClusterSecretType,
 			Data: map[string][]byte{},
 		}
 		It("should return the proper name for the kubeconfig", func() {

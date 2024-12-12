@@ -26,7 +26,7 @@ var _ = Describe("Kubeadm provider tests", func() {
 				ControlPlaneRef: &corev1.ObjectReference{
 					APIVersion: "controlplane.cluster.x-k8s.io/v1beta1",
 					Kind:       "KubeadmControlPlane",
-					Name:       clusterName,
+					Name:       clusterName + "-control-plane",
 					Namespace:  clusterNamespace,
 				},
 			},
@@ -37,12 +37,16 @@ var _ = Describe("Kubeadm provider tests", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      clusterName + "-kubeconfig",
 				Namespace: clusterNamespace,
+				Labels: map[string]string{
+					capiv1beta1.ClusterNameLabel: clusterName,
+				},
 				OwnerReferences: []metav1.OwnerReference{
 					{
-						APIVersion:         "controlplane.cluster.x-k8s.io/v1beta1",
+						APIVersion:         cluster.Spec.ControlPlaneRef.APIVersion,
 						BlockOwnerDeletion: func(v bool) *bool { return &v }(true),
 						Controller:         func(v bool) *bool { return &v }(true),
-						Kind:               "KubeadmControlPlane",
+						Kind:               cluster.Spec.ControlPlaneRef.Kind,
+						Name:               cluster.Spec.ControlPlaneRef.Name,
 						UID:                cluster.GetUID(),
 					},
 				},
@@ -50,24 +54,18 @@ var _ = Describe("Kubeadm provider tests", func() {
 			Data: map[string][]byte{},
 		}
 
-		// Multiple owner references
+		// Missing label
 		var badConfig2 = corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      clusterName + "-kubeconfig",
 				Namespace: clusterNamespace,
 				OwnerReferences: []metav1.OwnerReference{
 					{
-						APIVersion:         "controlplane.cluster.x-k8s.io/v1beta1",
+						APIVersion:         cluster.Spec.ControlPlaneRef.APIVersion,
 						BlockOwnerDeletion: func(v bool) *bool { return &v }(true),
 						Controller:         func(v bool) *bool { return &v }(true),
-						Kind:               "KubeadmControlPlane",
-						UID:                cluster.GetUID(),
-					},
-					{
-						APIVersion:         "controlplane.cluster.x-k8s.io/v1beta1",
-						BlockOwnerDeletion: func(v bool) *bool { return &v }(true),
-						Controller:         func(v bool) *bool { return &v }(true),
-						Kind:               "KubeadmControlPlane",
+						Kind:               cluster.Spec.ControlPlaneRef.Kind,
+						Name:               cluster.Spec.ControlPlaneRef.Name,
 						UID:                cluster.GetUID(),
 					},
 				},
@@ -76,18 +74,47 @@ var _ = Describe("Kubeadm provider tests", func() {
 			Data: map[string][]byte{},
 		}
 
-		// Fake kind
+		// Multiple owner references
 		var badConfig3 = corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      clusterName + "-kubeconfig",
 				Namespace: clusterNamespace,
+				Labels: map[string]string{
+					capiv1beta1.ClusterNameLabel: clusterName,
+				},
 				OwnerReferences: []metav1.OwnerReference{
 					{
-						APIVersion:         "controlplane.cluster.x-k8s.io/v1beta1",
+						APIVersion:         cluster.Spec.ControlPlaneRef.APIVersion,
 						BlockOwnerDeletion: func(v bool) *bool { return &v }(true),
 						Controller:         func(v bool) *bool { return &v }(true),
-						Kind:               "FakeKind",
+						Kind:               cluster.Spec.ControlPlaneRef.Kind,
+						Name:               cluster.Spec.ControlPlaneRef.Name,
 						UID:                cluster.GetUID(),
+					},
+					{
+						APIVersion: "fake.io/v1alpha1",
+						Kind:       "Fake",
+						Name:       "FakeObject",
+					},
+				},
+			},
+			Type: "cluster.x-k8s.io/secret",
+			Data: map[string][]byte{},
+		}
+
+		// Invalid owner reference
+		var badConfig4 = corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      clusterName + "-kubeconfig",
+				Namespace: clusterNamespace,
+				Labels: map[string]string{
+					capiv1beta1.ClusterNameLabel: clusterName,
+				},
+				OwnerReferences: []metav1.OwnerReference{
+					{
+						APIVersion: "fake.io/v1alpha1",
+						Kind:       "Fake",
+						Name:       "FakeObject",
 					},
 				},
 			},
@@ -96,9 +123,11 @@ var _ = Describe("Kubeadm provider tests", func() {
 		}
 
 		var p = kubeadmControlPlane{
-			APIVersion: cluster.Spec.ControlPlaneRef.APIVersion,
-			Name:       cluster.Spec.ControlPlaneRef.Name,
-			Namespace:  cluster.Spec.ControlPlaneRef.Namespace,
+			APIVersion:       cluster.Spec.ControlPlaneRef.APIVersion,
+			ControlPlaneName: cluster.Spec.ControlPlaneRef.Name,
+			Namespace:        cluster.Spec.ControlPlaneRef.Namespace,
+			ClusterName:      cluster.Name,
+			UID:              cluster.UID,
 		}
 
 		It("should reject all invalid kubeconfigs", func() {
@@ -109,6 +138,8 @@ var _ = Describe("Kubeadm provider tests", func() {
 			validated = p.IsKubeconfig(&badConfig2)
 			Expect(validated).To(BeFalse())
 			validated = p.IsKubeconfig(&badConfig3)
+			Expect(validated).To(BeFalse())
+			validated = p.IsKubeconfig(&badConfig4)
 			Expect(validated).To(BeFalse())
 		})
 	})
@@ -152,9 +183,11 @@ var _ = Describe("Kubeadm provider tests", func() {
 		}
 
 		var p = kubeadmControlPlane{
-			APIVersion: cluster.Spec.ControlPlaneRef.APIVersion,
-			Name:       cluster.Spec.ControlPlaneRef.Name,
-			Namespace:  cluster.Spec.ControlPlaneRef.Namespace,
+			APIVersion:       cluster.Spec.ControlPlaneRef.APIVersion,
+			ControlPlaneName: cluster.Spec.ControlPlaneRef.Name,
+			Namespace:        cluster.Spec.ControlPlaneRef.Namespace,
+			ClusterName:      cluster.Name,
+			UID:              cluster.UID,
 		}
 
 		It("should reject the unsupported cluster", func() {
