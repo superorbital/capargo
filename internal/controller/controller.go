@@ -30,6 +30,7 @@ var logger = logf.Log.WithName("capargo-controller")
 type ClusterKubeconfigReconciler struct {
 	client.Client
 	types.Options
+	providers.ClusterProvider
 }
 
 // Reconcile performs the main logic to create ArgoCD cluster secrets for
@@ -83,14 +84,14 @@ func (c *ClusterKubeconfigReconciler) deleteArgoCluster(ctx context.Context, req
 // kubeconfig as an ArgoCD cluster secret to the cluster.
 func (c *ClusterKubeconfigReconciler) createOrUpdateArgoCluster(ctx context.Context, cluster *capiv1beta1.Cluster) error {
 	capiSecret := &corev1.Secret{}
-	namespacedName, err := providers.GetCapiKubeconfigNamespacedName(cluster)
+	namespacedName, err := c.GetCapiKubeconfigNamespacedName(cluster)
 	if err != nil {
 		return err
 	}
 	if err := c.Get(ctx, namespacedName, capiSecret, &client.GetOptions{}); err != nil {
 		return err
 	}
-	valid, err := providers.IsCapiKubeconfig(capiSecret, cluster)
+	valid, err := c.IsCapiKubeconfig(ctx, capiSecret, cluster)
 	if err != nil {
 		return err
 	}

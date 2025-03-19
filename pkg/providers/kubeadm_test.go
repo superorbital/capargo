@@ -10,6 +10,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	capiv1beta1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	kubeadmv1beta1 "sigs.k8s.io/cluster-api/controlplane/kubeadm/api/v1beta1"
 )
 
 var _ = Describe("Kubeadm provider tests", func() {
@@ -24,7 +25,7 @@ var _ = Describe("Kubeadm provider tests", func() {
 			},
 			Spec: capiv1beta1.ClusterSpec{
 				ControlPlaneRef: &corev1.ObjectReference{
-					APIVersion: "controlplane.cluster.x-k8s.io/v1beta1",
+					APIVersion: kubeadmv1beta1.GroupVersion.String(),
 					Kind:       "KubeadmControlPlane",
 					Name:       clusterName + "-control-plane",
 					Namespace:  clusterNamespace,
@@ -122,24 +123,23 @@ var _ = Describe("Kubeadm provider tests", func() {
 			Data: map[string][]byte{},
 		}
 
-		var p = kubeadmControlPlane{
-			APIVersion:       cluster.Spec.ControlPlaneRef.APIVersion,
-			ControlPlaneName: cluster.Spec.ControlPlaneRef.Name,
-			Namespace:        cluster.Spec.ControlPlaneRef.Namespace,
-			ClusterName:      cluster.Name,
-			UID:              cluster.UID,
-		}
-
 		It("should reject all invalid kubeconfigs", func() {
+			var p = kubeadmControlPlane{
+				Client:           k8sClient,
+				APIVersion:       cluster.Spec.ControlPlaneRef.APIVersion,
+				ControlPlaneName: cluster.Spec.ControlPlaneRef.Name,
+				Namespace:        cluster.Spec.ControlPlaneRef.Namespace,
+				ClusterName:      cluster.Name,
+			}
 			var validated bool
 			By("providing kubeconfig secrets with bad configs")
-			validated = p.IsKubeconfig(&badConfig1)
+			validated = p.IsKubeconfig(ctx, &badConfig1)
 			Expect(validated).To(BeFalse())
-			validated = p.IsKubeconfig(&badConfig2)
+			validated = p.IsKubeconfig(ctx, &badConfig2)
 			Expect(validated).To(BeFalse())
-			validated = p.IsKubeconfig(&badConfig3)
+			validated = p.IsKubeconfig(ctx, &badConfig3)
 			Expect(validated).To(BeFalse())
-			validated = p.IsKubeconfig(&badConfig4)
+			validated = p.IsKubeconfig(ctx, &badConfig4)
 			Expect(validated).To(BeFalse())
 		})
 	})
@@ -156,7 +156,7 @@ var _ = Describe("Kubeadm provider tests", func() {
 			},
 			Spec: capiv1beta1.ClusterSpec{
 				ControlPlaneRef: &corev1.ObjectReference{
-					APIVersion: "controlplane.cluster.x-k8s.io/v1beta2",
+					APIVersion: "controlplane.cluster.x-k8s.io/v1alpha1",
 					Kind:       "KubeadmControlPlane",
 					Name:       clusterName,
 					Namespace:  clusterNamespace,
@@ -170,7 +170,7 @@ var _ = Describe("Kubeadm provider tests", func() {
 				Namespace: clusterNamespace,
 				OwnerReferences: []metav1.OwnerReference{
 					{
-						APIVersion:         "controlplane.cluster.x-k8s.io/v1beta1",
+						APIVersion:         cluster.Spec.ControlPlaneRef.APIVersion,
 						BlockOwnerDeletion: func(v bool) *bool { return &v }(true),
 						Controller:         func(v bool) *bool { return &v }(true),
 						Kind:               "KubeadmControlPlane",
@@ -182,18 +182,17 @@ var _ = Describe("Kubeadm provider tests", func() {
 			Data: map[string][]byte{},
 		}
 
-		var p = kubeadmControlPlane{
-			APIVersion:       cluster.Spec.ControlPlaneRef.APIVersion,
-			ControlPlaneName: cluster.Spec.ControlPlaneRef.Name,
-			Namespace:        cluster.Spec.ControlPlaneRef.Namespace,
-			ClusterName:      cluster.Name,
-			UID:              cluster.UID,
-		}
-
 		It("should reject the unsupported cluster", func() {
+			var p = kubeadmControlPlane{
+				Client:           k8sClient,
+				APIVersion:       cluster.Spec.ControlPlaneRef.APIVersion,
+				ControlPlaneName: cluster.Spec.ControlPlaneRef.Name,
+				Namespace:        cluster.Spec.ControlPlaneRef.Namespace,
+				ClusterName:      cluster.Name,
+			}
 			var validated bool
 			By("trying to validate the kubeconfig")
-			validated = p.IsKubeconfig(&kubeconfig)
+			validated = p.IsKubeconfig(ctx, &kubeconfig)
 			Expect(validated).To(BeFalse())
 		})
 	})

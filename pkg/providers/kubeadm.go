@@ -1,25 +1,27 @@
 package providers
 
 import (
+	"context"
 	"fmt"
-	"reflect"
 
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	capiv1beta1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	kubeadmv1beta1 "sigs.k8s.io/cluster-api/controlplane/kubeadm/api/v1beta1"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-var v1beta1KubeadmControlPlane = fmt.Sprintf("%s/%s", kubeadmv1beta1.GroupVersion.Group, kubeadmv1beta1.GroupVersion.Version)
+var v1beta1KubeadmControlPlane = kubeadmv1beta1.GroupVersion.String()
 
 type kubeadmControlPlane struct {
+	client.Client
 	ControlPlaneName string
 	ClusterName      string
 	Namespace        string
 	APIVersion       string
-	UID              types.UID
 }
 
 // GetNamespacedName returns the namespace and name of a cluster
@@ -33,7 +35,8 @@ func (k kubeadmControlPlane) GetNamespacedName() types.NamespacedName {
 
 // IsKubeconfig determines whether the secret provided is a
 // KubeadmControlPlane kubeconfig or not.
-func (k kubeadmControlPlane) IsKubeconfig(secret *corev1.Secret) bool {
+func (k kubeadmControlPlane) IsKubeconfig(ctx context.Context, secret *corev1.Secret) bool {
+	logger := logf.FromContext(ctx).WithName(loggerName)
 	switch k.APIVersion {
 	case v1beta1KubeadmControlPlane:
 		if secret.Type != capiv1beta1.ClusterSecretType {
@@ -53,27 +56,25 @@ func (k kubeadmControlPlane) IsKubeconfig(secret *corev1.Secret) bool {
 			)
 			return false
 		}
-		ors := secret.GetOwnerReferences()
-		if len(ors) != 1 {
-			logger.V(4).Info("Secret has incorrect number of owner references",
+		kcp := kubeadmv1beta1.KubeadmControlPlane{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      k.ControlPlaneName,
+				Namespace: k.Namespace,
+			},
+		}
+		if err := k.Client.Get(ctx, client.ObjectKeyFromObject(&kcp), &kcp, &client.GetOptions{}); err != nil {
+			logger.V(4).Info("Could not find KubeadmControlPlane object for secret",
 				"secret namespace", secret.GetNamespace(),
 				"secret name", secret.GetName(),
-				"length", len(ors),
+				"error", err,
 			)
 			return false
 		}
-		if !reflect.DeepEqual(metav1.OwnerReference{
-			APIVersion:         k.APIVersion,
-			BlockOwnerDeletion: func(v bool) *bool { return &v }(true),
-			Controller:         func(v bool) *bool { return &v }(true),
-			Kind:               string(kubeadmKind),
-			Name:               k.ControlPlaneName,
-			UID:                k.UID,
-		}, ors[0]) {
+		if !metav1.IsControlledBy(secret, &kcp) {
 			logger.V(4).Info("Secret is not owned by KubeadmControlPlane",
 				"secret namespace", secret.GetNamespace(),
 				"secret name", secret.GetName(),
-				"owner reference", ors[0],
+				"owner references", secret.GetOwnerReferences(),
 			)
 			return false
 		}

@@ -8,12 +8,14 @@ import (
 
 	"github.com/superorbital/capargo/internal/controller"
 	"github.com/superorbital/capargo/pkg/common"
+	"github.com/superorbital/capargo/pkg/providers"
 	"github.com/superorbital/capargo/pkg/types"
 
 	corev1 "k8s.io/api/core/v1"
 
 	apimachinerytypes "k8s.io/apimachinery/pkg/types"
-	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	capiv1beta1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	kubeadmv1beta1 "sigs.k8s.io/cluster-api/controlplane/kubeadm/api/v1beta1"
 	clientconfig "sigs.k8s.io/controller-runtime/pkg/client/config"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -101,7 +103,7 @@ var rootCmd = &cobra.Command{
 
 		err = builder.
 			ControllerManagedBy(mgr).
-			For(&clusterv1.Cluster{}).
+			For(&capiv1beta1.Cluster{}).
 			Watches(&corev1.Secret{},
 				handler.EnqueueRequestsFromMapFunc(
 					func(ctx context.Context, obj client.Object) []reconcile.Request {
@@ -129,6 +131,9 @@ var rootCmd = &cobra.Command{
 			Complete(&controller.ClusterKubeconfigReconciler{
 				Client:  mgr.GetClient(),
 				Options: o,
+				ClusterProvider: providers.ClusterProvider{
+					Client: mgr.GetClient(),
+				},
 			})
 		if err != nil {
 			logger.Error(err, "could not create controller")
@@ -144,7 +149,8 @@ var rootCmd = &cobra.Command{
 
 func init() {
 	_ = corev1.AddToScheme(scheme)
-	_ = clusterv1.AddToScheme(scheme)
+	_ = capiv1beta1.AddToScheme(scheme)
+	_ = kubeadmv1beta1.AddToScheme(scheme)
 	opts.BindFlags(flag.CommandLine)
 	rootCmd.PersistentFlags().AddGoFlagSet(flag.CommandLine)
 	rootCmd.Flags().StringVar(&clusterID, "id", "kind", "The name of the cluster where capargo is located.")

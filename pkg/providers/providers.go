@@ -1,15 +1,17 @@
 package providers
 
 import (
+	"context"
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
+	capiv1beta1 "sigs.k8s.io/cluster-api/api/v1beta1"
+
 	"k8s.io/apimachinery/pkg/types"
-	clusterv1beta1 "sigs.k8s.io/cluster-api/api/v1beta1"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-var logger = logf.Log.WithName("capargo-providers")
+const loggerName = "capargo-providers"
 
 // controlPlaneRefKind
 type controlPlaneRefKind string
@@ -25,21 +27,25 @@ const (
 	vclusterKind controlPlaneRefKind = "VCluster"
 )
 
+type ClusterProvider struct {
+	client.Client
+}
+
 type provider interface {
 	GetNamespacedName() types.NamespacedName
-	IsKubeconfig(*corev1.Secret) bool
+	IsKubeconfig(context.Context, *corev1.Secret) bool
 }
 
 // getProvider returns the provider interface for a given CAPI cluster,
-func getProvider(cluster *clusterv1beta1.Cluster) (provider, error) {
+func (c *ClusterProvider) getProvider(cluster *capiv1beta1.Cluster) (provider, error) {
 	switch controlPlaneRefKind(cluster.Spec.ControlPlaneRef.Kind) {
 	case kubeadmKind:
 		var p provider = kubeadmControlPlane{
+			Client:           c.Client,
+			ClusterName:      cluster.Name,
 			APIVersion:       cluster.Spec.ControlPlaneRef.APIVersion,
 			ControlPlaneName: cluster.Spec.ControlPlaneRef.Name,
 			Namespace:        cluster.Spec.ControlPlaneRef.Namespace,
-			ClusterName:      cluster.Name,
-			UID:              cluster.UID,
 		}
 		return p, nil
 	case awsManagedKind:
@@ -63,18 +69,18 @@ func getProvider(cluster *clusterv1beta1.Cluster) (provider, error) {
 
 // IsCapiKubeconfig determines whether the secret provided is a CAPI kubeconfig
 // from a given control plane controller.
-func IsCapiKubeconfig(secret *corev1.Secret, cluster *clusterv1beta1.Cluster) (bool, error) {
-	p, err := getProvider(cluster)
+func (c *ClusterProvider) IsCapiKubeconfig(ctx context.Context, secret *corev1.Secret, cluster *capiv1beta1.Cluster) (bool, error) {
+	p, err := c.getProvider(cluster)
 	if err != nil {
 		return false, err
 	}
-	return p.IsKubeconfig(secret), nil
+	return p.IsKubeconfig(ctx, secret), nil
 }
 
 // GetCapiKubeconfigNamespacedName retrieves the expected namespace and name
 // for a CAPI cluster's kubeconfig.
-func GetCapiKubeconfigNamespacedName(cluster *clusterv1beta1.Cluster) (types.NamespacedName, error) {
-	p, err := getProvider(cluster)
+func (c *ClusterProvider) GetCapiKubeconfigNamespacedName(cluster *capiv1beta1.Cluster) (types.NamespacedName, error) {
+	p, err := c.getProvider(cluster)
 	if err != nil {
 		return types.NamespacedName{}, err
 	}

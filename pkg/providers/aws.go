@@ -1,9 +1,12 @@
 package providers
 
 import (
+	"context"
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+
 	"k8s.io/apimachinery/pkg/types"
 )
 
@@ -24,7 +27,8 @@ func (a awsManagedControlPlane) GetNamespacedName() types.NamespacedName {
 
 // IsKubeconfig determines whether the secret provided is an
 // AWSManagedControlPlane kubeconfig or not.
-func (a awsManagedControlPlane) IsKubeconfig(secret *corev1.Secret) bool {
+func (a awsManagedControlPlane) IsKubeconfig(ctx context.Context, secret *corev1.Secret) bool {
+	logger := logf.FromContext(ctx).WithName(loggerName)
 	switch a.APIVersion {
 	case "controlplane.cluster.x-k8s.io/v1beta2":
 		if secret.Type != "cluster.x-k8s.io/secret" {
@@ -56,8 +60,6 @@ func (a awsManagedControlPlane) IsKubeconfig(secret *corev1.Secret) bool {
 			logger.V(4).Info("Secret is not in the same namespace as AWSManagedControlPlane",
 				"secret namespace", secret.GetNamespace(),
 				"secret name", secret.GetName(),
-				"AWSManagedControlPlane namespace", a.Namespace,
-				"AWSManagedControlPlane name", a.Name,
 			)
 			return false
 		}
