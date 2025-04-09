@@ -49,7 +49,7 @@ install_github_binary "vcluster" "${VCLUSTER_BIN_VERSION}" "$(pwd)/bin" "loft-sh
 
 # Install argocd binary
 ARGOCD=bin/argocd
-ARGOCD_BIN_VERSION=v2.13.1
+ARGOCD_BIN_VERSION=v2.14.9
 install_github_binary "argocd" "${ARGOCD_BIN_VERSION}" "$(pwd)/bin" "argoproj/argo-cd"
 
 # Create vcluster cluster
