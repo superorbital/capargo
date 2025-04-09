@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM golang:1.23.2 AS build
+FROM golang:1.24.2 AS build
 
 ARG BUILDTIME
 ARG REVISION
